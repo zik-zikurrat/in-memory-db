@@ -54,6 +54,9 @@ func main() {
 				return
 			}
 		}
+		if err := scanner.Err(); err != nil {
+			fmt.Fprintf(os.Stderr, "scan error: %v\n", err)
+		}
 	}()
 
 	for {

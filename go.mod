@@ -3,7 +3,6 @@ module in-memory-key-value-db
 go 1.26.1
 
 require (
-	github.com/docker/go-units v0.5.0
 	github.com/ilyakaznacheev/cleanenv v1.5.0
 	go.uber.org/zap v1.28.0
 )
