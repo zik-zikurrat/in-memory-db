@@ -20,9 +20,9 @@ type EngineConfig struct {
 }
 
 type WALConfig struct {
-	FlushingBatchSize    int           `yaml:"flushing_batch_size"`
+	FlushingBatchSize    int64         `yaml:"flushing_batch_size"`
 	FlushingBatchTimeout time.Duration `yaml:"flushing_batch_timeout"`
-	MaxSegmentSize       int           `yaml:"max_segment_size"`
+	MaxSegmentSize       int64         `yaml:"max_segment_size"`
 	DataDir              string        `yaml:"data_directory"`
 }
 

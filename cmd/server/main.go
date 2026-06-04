@@ -32,6 +32,11 @@ func main() {
 	events := make(chan wal.WALEvent, 100)
 
 	worker := wal.NewWorker(logger, events)
+	wal, err := wal.NewWAL(cfg)
+	if err != nil {
+		logger.Error("error to create WAL", zap.Error(err))
+		return
+	}
 	go func() {
 		defer func() {
 			if r := recover(); r != nil {
@@ -40,7 +45,7 @@ func main() {
 				)
 			}
 		}()
-		worker.Run(wal.NewWAL(cfg), ctx)
+		worker.Run(ctx, wal)
 	}()
 
 	go func() {
