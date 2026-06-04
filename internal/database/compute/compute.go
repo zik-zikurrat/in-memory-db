@@ -1,6 +1,8 @@
 package compute
 
 import (
+	"in-memory-key-value-db/internal/database/storage/wal"
+
 	"go.uber.org/zap"
 )
 
@@ -12,12 +14,14 @@ type Storage interface {
 
 type Compute struct {
 	storage Storage
+	events  chan wal.WALEvent
 	log     *zap.Logger
 }
 
-func NewCompute(storage Storage, log *zap.Logger) *Compute {
+func NewCompute(storage Storage, log *zap.Logger, events chan wal.WALEvent) *Compute {
 	return &Compute{
 		storage: storage,
+		events:  events,
 		log:     log,
 	}
 }
@@ -43,6 +47,12 @@ func (c *Compute) Handle(input string) (string, error) {
 			c.log.Error("set failed", zap.Error(err))
 			return "", err
 		}
+
+		c.events <- wal.WALEvent{
+			Command:   query.Command,
+			Arguments: query.Arguments,
+		}
+
 		return "OK", nil
 
 	case GetCommand:
@@ -58,6 +68,12 @@ func (c *Compute) Handle(input string) (string, error) {
 			c.log.Error("del failed", zap.Error(err))
 			return "", err
 		}
+
+		c.events <- wal.WALEvent{
+			Command:   query.Command,
+			Arguments: query.Arguments,
+		}
+
 		return "OK", nil
 	}
 

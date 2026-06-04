@@ -12,6 +12,7 @@ import (
 	"in-memory-key-value-db/internal/database/network"
 	"in-memory-key-value-db/internal/database/storage"
 	inmemory "in-memory-key-value-db/internal/database/storage/in_memory"
+	"in-memory-key-value-db/internal/database/storage/wal"
 	"in-memory-key-value-db/internal/logger"
 
 	"go.uber.org/zap"
@@ -28,6 +29,19 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
+	events := make(chan wal.WALEvent, 100)
+
+	worker := wal.NewWorker(logger, events)
+	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				logger.Error("catch panic from goroutine",
+					zap.Any("recovered", r),
+				)
+			}
+		}()
+		worker.Run(wal.NewWAL(cfg), ctx)
+	}()
 
 	go func() {
 		sig := <-sigChan
@@ -45,7 +59,7 @@ func main() {
 
 	engine := inmemory.NewEngine()
 	store := storage.NewStorage(engine, logger)
-	comp := compute.NewCompute(store, logger)
+	comp := compute.NewCompute(store, logger, events)
 
 	server, err := network.NewTCPServer(cfg, logger)
 	if err != nil {
@@ -64,5 +78,4 @@ func main() {
 		logger.Error("server stopped with error", zap.Error(err))
 	}
 	logger.Info("server stopped")
-
 }

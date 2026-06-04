@@ -16,6 +16,14 @@ type EngineConfig struct {
 	Type    string          `yaml:"type"`
 	Network TCPServerConfig `yaml:"network"`
 	Logging LoggingConfig   `yaml:"logging"`
+	WAl     WALConfig       `yaml:"wal"`
+}
+
+type WALConfig struct {
+	FlushingBatchSize    int           `yaml:"flushing_batch_size"`
+	FlushingBatchTimeout time.Duration `yaml:"flushing_batch_timeout"`
+	MaxSegmentSize       int           `yaml:"max_segment_size"`
+	DataDir              string        `yaml:"data_directory"`
 }
 
 type TCPServerConfig struct {
