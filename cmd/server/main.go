@@ -31,23 +31,6 @@ func main() {
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 	events := make(chan wal.WALEvent, 100)
 
-	worker := wal.NewWorker(logger, events)
-	wal, err := wal.NewWAL(cfg)
-	if err != nil {
-		logger.Error("error to create WAL", zap.Error(err))
-		return
-	}
-	go func() {
-		defer func() {
-			if r := recover(); r != nil {
-				logger.Error("catch panic from goroutine",
-					zap.Any("recovered", r),
-				)
-			}
-		}()
-		worker.Run(ctx, wal)
-	}()
-
 	go func() {
 		sig := <-sigChan
 		logger.Info("got os signal", zap.String("signal", sig.String()))
@@ -65,6 +48,22 @@ func main() {
 	engine := inmemory.NewEngine()
 	store := storage.NewStorage(engine, logger)
 	comp := compute.NewCompute(store, logger, events)
+	worker := wal.NewWorker(logger, events)
+	wal, err := wal.NewWAL(cfg, engine)
+	if err != nil {
+		logger.Error("error to create WAL", zap.Error(err))
+		return
+	}
+	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				logger.Error("catch panic from goroutine",
+					zap.Any("recovered", r),
+				)
+			}
+		}()
+		worker.Run(ctx, wal)
+	}()
 
 	server, err := network.NewTCPServer(cfg, logger)
 	if err != nil {

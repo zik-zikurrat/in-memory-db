@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"in-memory-key-value-db/internal/config"
+	inmemory "in-memory-key-value-db/internal/database/storage/in_memory"
 	"os"
 	"path/filepath"
 	"strings"
@@ -33,9 +34,9 @@ type WALEvent struct {
 	Arguments []string
 }
 
-func NewWAL(cfg *config.Config) (*WAL, error) {
+func NewWAL(cfg *config.Config, engine *inmemory.Engine) (*WAL, error) {
 	dir := cfg.Engine.WAl.DataDir
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	if err := os.MkdirAll(dir, 0755); err != nil {
 		return nil, fmt.Errorf("create wal dir: %w", err)
 	}
 
@@ -44,6 +45,9 @@ func NewWAL(cfg *config.Config) (*WAL, error) {
 		MaxBatchSize:   cfg.Engine.WAl.FlushingBatchSize,
 		MaxSegmentSize: cfg.Engine.WAl.MaxSegmentSize,
 		DataDir:        dir,
+	}
+	if err := w.restoreBatch(engine); err != nil {
+		return nil, err
 	}
 	if err := w.rotateSegment(); err != nil {
 		return nil, err
@@ -154,6 +158,36 @@ func (w *WAL) isSegmentFull() bool {
 func (w *WAL) close() error {
 	if err := w.CurrSegment.Close(); err != nil {
 		return err
+	}
+	return nil
+}
+
+func (w *WAL) restoreBatch(engine *inmemory.Engine) error {
+	logs, err := os.ReadDir(w.DataDir)
+	if err != nil {
+		return err
+	}
+
+	for _, logFile := range logs {
+		path := filepath.Join(w.DataDir, logFile.Name())
+
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		dataSplit := strings.Split(string(data), "\n")
+		for _, val := range dataSplit {
+			if val != "" {
+				query := strings.Split(val, " ")
+				command := query[0]
+				switch command {
+				case "SET":
+					engine.Set(query[1], query[2])
+				case "DEL":
+					engine.Del(query[1])
+				}
+			}
+		}
 	}
 	return nil
 }
