@@ -182,8 +182,14 @@ func (w *WAL) restoreBatch(engine *inmemory.Engine) error {
 				command := query[0]
 				switch command {
 				case "SET":
+					if len(query) < 3 {
+						continue
+					}
 					engine.Set(query[1], query[2])
 				case "DEL":
+					if len(query) < 2 {
+						continue
+					}
 					engine.Del(query[1])
 				}
 			}
