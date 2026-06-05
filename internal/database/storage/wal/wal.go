@@ -124,7 +124,7 @@ func NewWorker(log *zap.Logger, events chan WALEvent) *Worker {
 }
 
 func (w *Worker) Run(ctx context.Context, wal *WAL) {
-	ticker := time.NewTicker(time.Minute)
+	ticker := time.NewTicker(20 * time.Millisecond)
 	defer ticker.Stop()
 
 	for {

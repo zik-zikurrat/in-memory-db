@@ -51,6 +51,7 @@ func (c *Compute) Handle(input string) (string, error) {
 		}
 		if err := <-done; err != nil {
 			c.log.Error("wal write failed", zap.Error(err))
+			return "", err
 		}
 		if err := c.storage.Set(query.Arguments[0], query.Arguments[1]); err != nil {
 			c.log.Error("set failed", zap.Error(err))
@@ -76,6 +77,7 @@ func (c *Compute) Handle(input string) (string, error) {
 		}
 		if err := <-done; err != nil {
 			c.log.Error("wal write failed", zap.Error(err))
+			return "", err
 		}
 		if err := c.storage.Del(query.Arguments[0]); err != nil {
 			c.log.Error("del failed", zap.Error(err))
