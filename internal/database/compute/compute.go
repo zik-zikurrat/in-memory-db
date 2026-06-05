@@ -43,14 +43,17 @@ func (c *Compute) Handle(input string) (string, error) {
 
 	switch query.Command {
 	case SetCommand:
-		if err := c.storage.Set(query.Arguments[0], query.Arguments[1]); err != nil {
-			c.log.Error("set failed", zap.Error(err))
-			return "", err
-		}
-
+		done := make(chan error, 1)
 		c.events <- wal.WALEvent{
 			Command:   query.Command,
 			Arguments: query.Arguments,
+		}
+		if err := <-done; err != nil {
+			c.log.Error("wal write failed", zap.Error(err))
+		}
+		if err := c.storage.Set(query.Arguments[0], query.Arguments[1]); err != nil {
+			c.log.Error("set failed", zap.Error(err))
+			return "", err
 		}
 
 		return "OK", nil
@@ -64,14 +67,17 @@ func (c *Compute) Handle(input string) (string, error) {
 		return value, nil
 
 	case DelCommand:
-		if err := c.storage.Del(query.Arguments[0]); err != nil {
-			c.log.Error("del failed", zap.Error(err))
-			return "", err
-		}
-
+		done := make(chan error, 1)
 		c.events <- wal.WALEvent{
 			Command:   query.Command,
 			Arguments: query.Arguments,
+		}
+		if err := <-done; err != nil {
+			c.log.Error("wal write failed", zap.Error(err))
+		}
+		if err := c.storage.Del(query.Arguments[0]); err != nil {
+			c.log.Error("del failed", zap.Error(err))
+			return "", err
 		}
 
 		return "OK", nil

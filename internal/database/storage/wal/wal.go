@@ -16,6 +16,7 @@ import (
 type WAL struct {
 	Offset          int
 	Batch           []string
+	Pending         []chan error
 	MaxBatchSize    int64
 	DataDir         string
 	MaxSegmentSize  int64
@@ -32,6 +33,7 @@ type Worker struct {
 type WALEvent struct {
 	Command   string
 	Arguments []string
+	Done      chan error
 }
 
 func NewWAL(cfg *config.Config, engine *inmemory.Engine) (*WAL, error) {
@@ -103,6 +105,17 @@ func (w *WAL) flushBatch() error {
 	return nil
 }
 
+func (w *WAL) flushAndNotify(log *zap.Logger) {
+	err := w.flushBatch()
+	for _, done := range w.Pending {
+		done <- err
+	}
+	w.Pending = w.Pending[:0]
+	if err != nil {
+		log.Error("flush failed", zap.Error(err))
+	}
+}
+
 func NewWorker(log *zap.Logger, events chan WALEvent) *Worker {
 	return &Worker{
 		log:    log,
@@ -123,11 +136,10 @@ func (w *Worker) Run(ctx context.Context, wal *WAL) {
 				zap.String("argument", strings.Join(event.Arguments, " ")),
 			)
 			wal.Batch = append(wal.Batch, fmt.Sprintf("%s %s", event.Command, strings.Join(event.Arguments, " ")))
+			wal.Pending = append(wal.Pending, event.Done)
 			wal.Offset++
 			if wal.isBatchFull() {
-				if err := wal.flushBatch(); err != nil {
-					w.log.Error("flush failed", zap.Error(err))
-				}
+				wal.flushAndNotify(w.log)
 			}
 		case <-ticker.C:
 			w.log.Info("time to flush batch")
