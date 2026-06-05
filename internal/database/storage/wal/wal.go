@@ -138,7 +138,10 @@ func (w *Worker) Run(ctx context.Context, wal *WAL) {
 			w.log.Info("context done")
 			for {
 				select {
-				case event := <-w.events:
+				case event, ok := <-w.events:
+					if !ok {
+						goto flush
+					}
 					wal.Batch = append(wal.Batch, fmt.Sprintf("%s %s", event.Command, strings.Join(event.Arguments, " ")))
 				default:
 					goto flush
