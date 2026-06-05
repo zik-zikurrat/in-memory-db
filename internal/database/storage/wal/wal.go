@@ -142,9 +142,9 @@ func (w *Worker) Run(ctx context.Context, wal *WAL) {
 				wal.flushAndNotify(w.log)
 			}
 		case <-ticker.C:
-			w.log.Info("time to flush batch")
-			if err := wal.flushBatch(); err != nil {
-				w.log.Error("flush failed", zap.Error(err))
+			if len(wal.Batch) > 0 {
+				w.log.Debug("flushing batch by ticker", zap.Int("size", len(wal.Batch)))
+				wal.flushAndNotify(w.log)
 			}
 		case <-ctx.Done():
 			w.log.Info("context done")
@@ -160,9 +160,8 @@ func (w *Worker) Run(ctx context.Context, wal *WAL) {
 				}
 			}
 		flush:
-			if err := wal.flushBatch(); err != nil {
-				w.log.Error("flush failed", zap.Error(err))
-			}
+			w.log.Debug("flushing batch by ctx done", zap.Int("size", len(wal.Batch)))
+			wal.flushAndNotify(w.log)
 			if err := wal.close(); err != nil {
 				w.log.Error("error closed wal", zap.Error(err))
 			}
