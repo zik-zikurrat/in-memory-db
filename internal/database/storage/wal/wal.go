@@ -136,6 +136,15 @@ func (w *Worker) Run(ctx context.Context, wal *WAL) {
 			}
 		case <-ctx.Done():
 			w.log.Info("context done")
+			for {
+				select {
+				case event := <-w.events:
+					wal.Batch = append(wal.Batch, fmt.Sprintf("%s %s", event.Command, strings.Join(event.Arguments, " ")))
+				default:
+					goto flush
+				}
+			}
+		flush:
 			if err := wal.flushBatch(); err != nil {
 				w.log.Error("flush failed", zap.Error(err))
 			}
