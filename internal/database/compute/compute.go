@@ -47,6 +47,7 @@ func (c *Compute) Handle(input string) (string, error) {
 		c.events <- wal.WALEvent{
 			Command:   query.Command,
 			Arguments: query.Arguments,
+			Done:      done,
 		}
 		if err := <-done; err != nil {
 			c.log.Error("wal write failed", zap.Error(err))
@@ -71,6 +72,7 @@ func (c *Compute) Handle(input string) (string, error) {
 		c.events <- wal.WALEvent{
 			Command:   query.Command,
 			Arguments: query.Arguments,
+			Done:      done,
 		}
 		if err := <-done; err != nil {
 			c.log.Error("wal write failed", zap.Error(err))
