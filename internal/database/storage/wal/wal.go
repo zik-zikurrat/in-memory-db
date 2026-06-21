@@ -214,7 +214,7 @@ func (w *WAL) restoreBatch(engine *inmemory.Engine) error {
 					}
 					n, err := strconv.Atoi(query[3])
 					if err != nil {
-						return fmt.Errorf("Error converting ttl to int")
+						return fmt.Errorf("error converting ttl to int")
 					}
 
 					d := time.Duration(n) * time.Second

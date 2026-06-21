@@ -51,7 +51,7 @@ func (c *Compute) Handle(input string) (string, error) {
 	case SetCommand:
 		n, err := strconv.Atoi(query.Arguments[2])
 		if err != nil {
-			return "", fmt.Errorf("Error converting ttl to int")
+			return "", fmt.Errorf("error converting ttl to int")
 		}
 
 		d := time.Duration(n) * time.Second

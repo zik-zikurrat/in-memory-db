@@ -25,7 +25,7 @@ type TCPServer struct {
 func NewTCPServer(cfg *config.Config, log *zap.Logger) (*TCPServer, error) {
 	listener, err := net.Listen("tcp", cfg.Engine.Network.Address)
 	if err != nil {
-		return nil, fmt.Errorf("Error while listen to tcp: %v", err.Error())
+		return nil, fmt.Errorf("error while listen to tcp: %v", err.Error())
 	}
 	return &TCPServer{
 		listener:       listener,
@@ -43,7 +43,9 @@ func (s *TCPServer) Start(ctx context.Context, handler Handler) error {
 
 	go func() {
 		<-ctx.Done()
-		s.listener.Close()
+		if err := s.listener.Close(); err != nil {
+			s.log.Error("close server", zap.Error(err))
+		}
 	}()
 
 	for {
@@ -60,7 +62,9 @@ func (s *TCPServer) Start(ctx context.Context, handler Handler) error {
 		select {
 		case sem <- struct{}{}:
 		case <-ctx.Done():
-			conn.Close()
+			if err := conn.Close(); err != nil {
+				s.log.Error("close server", zap.Error(err))
+			}
 			wg.Wait()
 			return nil
 		}
@@ -79,12 +83,18 @@ func (s *TCPServer) handleConnection(conn net.Conn, handler Handler) {
 			s.log.Error("captured panic", zap.Any("panic", v))
 		}
 	}()
-	defer conn.Close()
+	defer func() {
+		if err := conn.Close(); err != nil {
+			s.log.Error("close server", zap.Error(err))
+		}
+	}()
 	scanner := bufio.NewScanner(conn)
 	buf := make([]byte, s.bufferSize)
 	scanner.Buffer(buf, s.bufferSize)
 	for {
-		conn.SetReadDeadline(time.Now().Add(s.idleTimeout))
+		if err := conn.SetReadDeadline(time.Now().Add(s.idleTimeout)); err != nil {
+			s.log.Error("set read deadline", zap.Error(err))
+		}
 		if !scanner.Scan() {
 			break
 		}
