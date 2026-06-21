@@ -11,7 +11,7 @@ import (
 	"in-memory-key-value-db/internal/database/compute"
 	"in-memory-key-value-db/internal/database/network"
 	"in-memory-key-value-db/internal/database/storage"
-	"in-memory-key-value-db/internal/database/storage/expirity"
+	"in-memory-key-value-db/internal/database/storage/expiry"
 	inmemory "in-memory-key-value-db/internal/database/storage/in_memory"
 	"in-memory-key-value-db/internal/database/storage/wal"
 	"in-memory-key-value-db/internal/logger"
@@ -31,7 +31,7 @@ func main() {
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 	walEvents := make(chan wal.WALEvent, 100)
-	expirityEvent := make(chan expirity.ExpirityEvent, 100)
+	expiryEvent := make(chan expiry.ExpiryEvent, 100)
 
 	go func() {
 		sig := <-sigChan
@@ -52,7 +52,7 @@ func main() {
 	// Storage
 	store := storage.NewStorage(engine, logger)
 	// Compute
-	comp := compute.NewCompute(store, logger, walEvents, expirityEvent)
+	comp := compute.NewCompute(store, logger, walEvents, expiryEvent)
 	// WAL
 	walWorker := wal.NewWorker(logger, walEvents)
 	wal, err := wal.NewWAL(cfg, engine)
@@ -71,9 +71,9 @@ func main() {
 		walWorker.Run(ctx, wal)
 	}()
 
-	// Expirity
-	expirityWorker := expirity.NewWorker(logger, expirityEvent)
-	expirity := expirity.NewExpirity()
+	// Expiry
+	expiryWorker := expiry.NewWorker(logger, expiryEvent)
+	expiry := expiry.NewExpiry()
 	go func() {
 		defer func() {
 			if r := recover(); r != nil {
@@ -82,7 +82,7 @@ func main() {
 				)
 			}
 		}()
-		expirityWorker.Run(ctx, expirity, engine)
+		expiryWorker.Run(ctx, expiry, engine)
 	}()
 
 	server, err := network.NewTCPServer(cfg, logger)

@@ -1,4 +1,4 @@
-package expirity
+package expiry
 
 import (
 	"context"
@@ -10,29 +10,27 @@ import (
 	"go.uber.org/zap"
 )
 
-type Expirity struct {
-	toClean  map[string]time.Duration // нужно для того чтобы в случае завершения контекста знать что надо очистить
-	cleaners int                      // кол-во горутин которые чистят storage
+type Expiry struct {
+	cleaners int
 }
 
-type ExpirityEvent struct {
+type ExpiryEvent struct {
 	Key  string
 	Time time.Duration
 }
 
 type Worker struct {
 	log   *zap.Logger
-	event chan ExpirityEvent
+	event chan ExpiryEvent
 }
 
-func NewExpirity() *Expirity {
-	return &Expirity{
-		toClean:  make(map[string]time.Duration),
+func NewExpiry() *Expiry {
+	return &Expiry{
 		cleaners: 100,
 	}
 }
 
-func NewWorker(log *zap.Logger, event chan ExpirityEvent) *Worker {
+func NewWorker(log *zap.Logger, event chan ExpiryEvent) *Worker {
 	return &Worker{
 		log:   log,
 		event: event,
@@ -40,15 +38,15 @@ func NewWorker(log *zap.Logger, event chan ExpirityEvent) *Worker {
 }
 
 func (w *Worker) Run(ctx context.Context,
-	expirity *Expirity,
+	expiry *Expiry,
 	engine *inmemory.Engine,
 ) {
-	toClean := make(chan ExpirityEvent)
+	toClean := make(chan ExpiryEvent)
 	var wg sync.WaitGroup
 
-	for i := 1; i <= expirity.cleaners; i++ {
+	for i := 1; i <= expiry.cleaners; i++ {
 		wg.Add(1)
-		go func(id int, wg *sync.WaitGroup, toClean <-chan ExpirityEvent) {
+		go func(id int, wg *sync.WaitGroup, toClean <-chan ExpiryEvent) {
 			defer func() {
 				if r := recover(); r != nil {
 					w.log.Error("recovered. Panic in cleaner goroutine", zap.Any("panic", r))
@@ -61,9 +59,9 @@ func (w *Worker) Run(ctx context.Context,
 	for {
 		select {
 		case event := <-w.event:
-			expirity.toClean[event.Key] = event.Time
 			toClean <- event
 		case <-ctx.Done():
+			close(toClean)
 			w.log.Info("context done")
 			return
 		}
@@ -73,7 +71,7 @@ func (w *Worker) Run(ctx context.Context,
 func (w *Worker) clear(
 	id int,
 	wg *sync.WaitGroup,
-	toClean <-chan ExpirityEvent,
+	toClean <-chan ExpiryEvent,
 	engine *inmemory.Engine,
 ) {
 	defer wg.Done()

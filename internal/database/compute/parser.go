@@ -6,7 +6,7 @@ import (
 )
 
 const (
-	DefaultExpirity = "30"
+	DefaultExpiry = "30"
 )
 
 var (
@@ -30,7 +30,7 @@ func ParseQuery(input string) (Query, error) {
 	args := fields[1:]
 	if len(args) != arity {
 		if cmd == "SET" {
-			args = append(args, DefaultExpirity)
+			args = append(args, DefaultExpiry)
 			return Query{Command: cmd, Arguments: args}, nil
 		}
 		return Query{}, ErrInvalidArguments

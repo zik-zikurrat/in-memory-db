@@ -2,7 +2,7 @@ package compute
 
 import (
 	"fmt"
-	"in-memory-key-value-db/internal/database/storage/expirity"
+	"in-memory-key-value-db/internal/database/storage/expiry"
 	"in-memory-key-value-db/internal/database/storage/wal"
 	"strconv"
 	"time"
@@ -17,18 +17,18 @@ type Storage interface {
 }
 
 type Compute struct {
-	storage        Storage
-	walEvents      chan wal.WALEvent
-	expirityEvents chan expirity.ExpirityEvent
-	log            *zap.Logger
+	storage     Storage
+	walEvents   chan wal.WALEvent
+	expiryEvent chan expiry.ExpiryEvent
+	log         *zap.Logger
 }
 
-func NewCompute(storage Storage, log *zap.Logger, walEvents chan wal.WALEvent, expirityEvents chan expirity.ExpirityEvent) *Compute {
+func NewCompute(storage Storage, log *zap.Logger, walEvents chan wal.WALEvent, expiryEvent chan expiry.ExpiryEvent) *Compute {
 	return &Compute{
-		storage:        storage,
-		walEvents:      walEvents,
-		expirityEvents: expirityEvents,
-		log:            log,
+		storage:     storage,
+		walEvents:   walEvents,
+		expiryEvent: expiryEvent,
+		log:         log,
 	}
 }
 
@@ -56,7 +56,7 @@ func (c *Compute) Handle(input string) (string, error) {
 
 		d := time.Duration(n) * time.Second
 
-		c.expirityEvents <- expirity.ExpirityEvent{
+		c.expiryEvent <- expiry.ExpiryEvent{
 			Key:  query.Arguments[0],
 			Time: d,
 		}
