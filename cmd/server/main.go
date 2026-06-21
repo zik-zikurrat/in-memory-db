@@ -73,7 +73,6 @@ func main() {
 
 	// Expiry
 	expiryWorker := expiry.NewWorker(logger, expiryEvent)
-	expiry := expiry.NewExpiry()
 	go func() {
 		defer func() {
 			if r := recover(); r != nil {
@@ -82,7 +81,7 @@ func main() {
 				)
 			}
 		}()
-		expiryWorker.Run(ctx, expiry, engine)
+		expiryWorker.Run(ctx, engine)
 	}()
 
 	server, err := network.NewTCPServer(cfg, logger)
