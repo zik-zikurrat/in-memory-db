@@ -55,7 +55,7 @@ func main() {
 	comp := compute.NewCompute(store, logger, walEvents, expiryEvent)
 	// WAL
 	walWorker := wal.NewWorker(logger, walEvents)
-	wal, err := wal.NewWAL(cfg, engine)
+	wal, err := wal.NewWAL(cfg, engine, expiryEvent)
 	if err != nil {
 		logger.Error("error to create WAL", zap.Error(err))
 		return

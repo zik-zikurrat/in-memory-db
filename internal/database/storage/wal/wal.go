@@ -4,9 +4,11 @@ import (
 	"context"
 	"fmt"
 	"in-memory-key-value-db/internal/config"
+	"in-memory-key-value-db/internal/database/storage/expiry"
 	inmemory "in-memory-key-value-db/internal/database/storage/in_memory"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -23,6 +25,7 @@ type WAL struct {
 	CurrSegmentPath string
 	CurrSegment     *os.File
 	CurrSegmentSize int64
+	expiryEvent     chan expiry.ExpiryEvent
 }
 
 type Worker struct {
@@ -36,7 +39,7 @@ type WALEvent struct {
 	Done      chan error
 }
 
-func NewWAL(cfg *config.Config, engine *inmemory.Engine) (*WAL, error) {
+func NewWAL(cfg *config.Config, engine *inmemory.Engine, expiryEvent chan expiry.ExpiryEvent) (*WAL, error) {
 	dir := cfg.Engine.WAl.DataDir
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		return nil, fmt.Errorf("create wal dir: %w", err)
@@ -47,6 +50,7 @@ func NewWAL(cfg *config.Config, engine *inmemory.Engine) (*WAL, error) {
 		MaxBatchSize:   cfg.Engine.WAl.FlushingBatchSize,
 		MaxSegmentSize: cfg.Engine.WAl.MaxSegmentSize,
 		DataDir:        dir,
+		expiryEvent:    expiryEvent,
 	}
 	if err := w.restoreBatch(engine); err != nil {
 		return nil, err
@@ -205,8 +209,19 @@ func (w *WAL) restoreBatch(engine *inmemory.Engine) error {
 				command := query[0]
 				switch command {
 				case "SET":
-					if len(query) < 3 {
+					if len(query) < 4 {
 						continue
+					}
+					n, err := strconv.Atoi(query[3])
+					if err != nil {
+						return fmt.Errorf("Error converting ttl to int")
+					}
+
+					d := time.Duration(n) * time.Second
+
+					w.expiryEvent <- expiry.ExpiryEvent{
+						Key:  query[0],
+						Time: d,
 					}
 					engine.Set(query[1], query[2])
 				case "DEL":
