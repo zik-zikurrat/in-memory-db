@@ -1,0 +1,46 @@
+---
+Tier 1 — конкретная польза, умеренная сложность
+
+TTL / expiry для ключей
+SET key value EX 30 — ключ живёт 30 секунд, потом удаляется. Научит: min-heap или time.AfterFunc, background goroutine для eviction, атомарность при concurrent доступе. Очень практично — используется везде (кэши, сессии, rate-limiting).
+
+Sharded map вместо одного sync.RWMutex
+Разбиваешь map[string]string на N сегментов (например, 16), каждый со своим mutex. Lock contention падает в N раз. Научит: hash-based partitioning, striped locking — один из самых важных паттернов для высоконагруженного Go-кода.
+
+Snapshot (checkpoint) + усечение WAL
+Сейчас при рестарте реплеится весь WAL с нуля — при больших данных это медленно. Добавить периодический снапшот всего состояния (encoding/gob или JSON), а после него WAL обнулять. Научит: сериализация, атомарная запись файлов (write → fsync → rename), coordination с WAL worker'ом.
+
+---
+Tier 2 — структуры данных
+
+LRU eviction при memory limit
+Когда ключей больше N — выбрасывать наименее недавно использованные. Классика: doubly-linked list + hashmap. Это одна из самых часто задаваемых задач на собеседованиях, но реализация в реальном concurrent коде гораздо интереснее, чем на leetcode.
+
+Cursor-based SCAN
+SCAN cursor COUNT 100 MATCH user:* — итерация по ключам без блокировки всей БД. Учит lazy iteration, snapshot-at-cursor design, работу с glob-паттернами.
+
+INCR / DECR
+Простые атомарные операции над числовыми значениями. Небольшая доработка, но учит как делать read-modify-write атомарно без явного мьютекса в слое команд.
+
+---
+Tier 3 — архитектура и протоколы
+
+RESP протокол
+Redis Serialization Protocol — несложный бинарный протокол. Если реализуешь его, к твоей БД можно подключиться redis-cli и любой Redis-клиент. Учит: чтение спеки и её имплементация, wire protocol, binary parsing.
+
+Pub/Sub
+SUBSCRIBE channel / PUBLISH channel message. Учит: fan-out через каналы, управление подписчиками, broadcast без shared state.
+
+Репликация (Leader → Follower)
+Одна нода слушает WAL stream от другой и реплеит. Учит distributed systems fundamentals вживую — это уже серьёзно.
+
+---
+Что взял бы в первую очередь
+
+Если цель — прокачать Go-навыки с максимальной отдачей:
+
+1. Sharded map — быстро, сразу видишь разницу в throughput, паттерн используется в продакшн коде постоянно
+2. TTL — практично, требует думать об atomicity и goroutine lifecycle
+3. Snapshot — закрывает реальную проблему в текущем коде и учит работе с файловой системой правильно
+
+Ещё стоит добавить тесты (их сейчас вообще нет) — хотя бы benchmarks для storage engine, это сразу покажет реальный эффект от sharding.
