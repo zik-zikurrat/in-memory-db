@@ -44,7 +44,9 @@ func (w *Worker) Run(ctx context.Context,
 }
 
 func (w *Worker) schedule(engine Deleter, key string, d time.Duration) {
-	time.AfterFunc(d, func() {
-		engine.Del(key)
-	})
+	if d > 0 {
+		time.AfterFunc(d, func() {
+			engine.Del(key)
+		})
+	}
 }

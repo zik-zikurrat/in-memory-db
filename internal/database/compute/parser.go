@@ -6,7 +6,7 @@ import (
 )
 
 const (
-	DefaultExpiry = "30"
+	DefaultExpiry = "0"
 )
 
 var (
