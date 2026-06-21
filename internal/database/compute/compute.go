@@ -1,7 +1,11 @@
 package compute
 
 import (
+	"fmt"
+	"in-memory-key-value-db/internal/database/storage/expirity"
 	"in-memory-key-value-db/internal/database/storage/wal"
+	"strconv"
+	"time"
 
 	"go.uber.org/zap"
 )
@@ -13,16 +17,18 @@ type Storage interface {
 }
 
 type Compute struct {
-	storage Storage
-	events  chan wal.WALEvent
-	log     *zap.Logger
+	storage        Storage
+	walEvents      chan wal.WALEvent
+	expirityEvents chan expirity.ExpirityEvent
+	log            *zap.Logger
 }
 
-func NewCompute(storage Storage, log *zap.Logger, events chan wal.WALEvent) *Compute {
+func NewCompute(storage Storage, log *zap.Logger, walEvents chan wal.WALEvent, expirityEvents chan expirity.ExpirityEvent) *Compute {
 	return &Compute{
-		storage: storage,
-		events:  events,
-		log:     log,
+		storage:        storage,
+		walEvents:      walEvents,
+		expirityEvents: expirityEvents,
+		log:            log,
 	}
 }
 
@@ -43,8 +49,20 @@ func (c *Compute) Handle(input string) (string, error) {
 
 	switch query.Command {
 	case SetCommand:
+		n, err := strconv.Atoi(query.Arguments[2])
+		if err != nil {
+			return "", fmt.Errorf("Error converting ttl to int")
+		}
+
+		d := time.Duration(n) * time.Second
+
+		c.expirityEvents <- expirity.ExpirityEvent{
+			Key:  query.Arguments[0],
+			Time: d,
+		}
+
 		done := make(chan error, 1)
-		c.events <- wal.WALEvent{
+		c.walEvents <- wal.WALEvent{
 			Command:   query.Command,
 			Arguments: query.Arguments,
 			Done:      done,
@@ -70,7 +88,7 @@ func (c *Compute) Handle(input string) (string, error) {
 
 	case DelCommand:
 		done := make(chan error, 1)
-		c.events <- wal.WALEvent{
+		c.walEvents <- wal.WALEvent{
 			Command:   query.Command,
 			Arguments: query.Arguments,
 			Done:      done,

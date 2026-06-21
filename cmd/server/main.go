@@ -11,6 +11,7 @@ import (
 	"in-memory-key-value-db/internal/database/compute"
 	"in-memory-key-value-db/internal/database/network"
 	"in-memory-key-value-db/internal/database/storage"
+	"in-memory-key-value-db/internal/database/storage/expirity"
 	inmemory "in-memory-key-value-db/internal/database/storage/in_memory"
 	"in-memory-key-value-db/internal/database/storage/wal"
 	"in-memory-key-value-db/internal/logger"
@@ -29,7 +30,8 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
-	events := make(chan wal.WALEvent, 100)
+	walEvents := make(chan wal.WALEvent, 100)
+	expirityEvent := make(chan expirity.ExpirityEvent, 100)
 
 	go func() {
 		sig := <-sigChan
@@ -45,10 +47,14 @@ func main() {
 		_ = logger.Sync()
 	}()
 
+	// Enegine
 	engine := inmemory.NewEngine()
+	// Storage
 	store := storage.NewStorage(engine, logger)
-	comp := compute.NewCompute(store, logger, events)
-	worker := wal.NewWorker(logger, events)
+	// Compute
+	comp := compute.NewCompute(store, logger, walEvents, expirityEvent)
+	// WAL
+	walWorker := wal.NewWorker(logger, walEvents)
 	wal, err := wal.NewWAL(cfg, engine)
 	if err != nil {
 		logger.Error("error to create WAL", zap.Error(err))
@@ -62,7 +68,21 @@ func main() {
 				)
 			}
 		}()
-		worker.Run(ctx, wal)
+		walWorker.Run(ctx, wal)
+	}()
+
+	// Expirity
+	expirityWorker := expirity.NewWorker(logger, expirityEvent)
+	expirity := expirity.NewExpirity()
+	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				logger.Error("catch panic from goroutine",
+					zap.Any("recovered", r),
+				)
+			}
+		}()
+		expirityWorker.Run(ctx, expirity, engine)
 	}()
 
 	server, err := network.NewTCPServer(cfg, logger)

@@ -5,6 +5,10 @@ import (
 	"strings"
 )
 
+const (
+	DefaultExpirity = "30"
+)
+
 var (
 	ErrEmptyQuery       = errors.New("empty query")
 	ErrUnknownCommand   = errors.New("unknown command")
@@ -25,6 +29,10 @@ func ParseQuery(input string) (Query, error) {
 
 	args := fields[1:]
 	if len(args) != arity {
+		if cmd == "SET" {
+			args = append(args, DefaultExpirity)
+			return Query{Command: cmd, Arguments: args}, nil
+		}
 		return Query{}, ErrInvalidArguments
 	}
 
