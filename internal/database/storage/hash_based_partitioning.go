@@ -1,10 +1,11 @@
 package storage
 
 import (
+	"runtime"
 	"sync"
 )
 
-const partitionCount = 16
+var partitionCount = runtime.NumCPU()
 
 func murmur2(data []byte) int32 {
 	const (
@@ -27,6 +28,7 @@ func murmur2(data []byte) int32 {
 		h *= m
 		h ^= k
 	}
+
 	switch length % 4 {
 	case 3:
 		h ^= uint32(data[(length & ^3)+2]) << 16
@@ -38,9 +40,11 @@ func murmur2(data []byte) int32 {
 		h ^= uint32(data[length & ^3])
 		h *= m
 	}
+
 	h ^= h >> 13
 	h *= m
 	h ^= h >> 15
+
 	return int32(h)
 }
 
@@ -55,7 +59,7 @@ type Partition struct {
 }
 
 type Data struct {
-	buckets [partitionCount]*Partition
+	buckets []*Partition
 }
 
 func NewPartition(key string, value interface{}) *Partition {
@@ -66,13 +70,22 @@ func NewPartition(key string, value interface{}) *Partition {
 
 func NewData() *Data {
 	d := &Data{}
-	for i := range d.buckets {
+	for i := range runtime.NumCPU() {
 		d.buckets[i] = &Partition{m: make(map[string]string)}
 
 	}
 	return d
 }
 
-func PartitionPut(data *Data, key string, value interface{}) bool {
+func (d *Data) bucket(key string) *Partition {
+	return d.buckets[partition([]byte(key), len(d.buckets))]
+}
 
+func PartitionPut(data *Data, key, value string) bool {
+	p := data.bucket(key)
+	p.mu.Lock()
+	_, existed := p.m[key]
+	p.m[key] = value
+	p.mu.Unlock()
+	return !existed // true = new key, false = rewrite
 }
