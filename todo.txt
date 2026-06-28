@@ -1,6 +1,6 @@
 ---
 Tier 1 — конкретная польза, умеренная сложность
-
+(DONE)
 TTL / expiry для ключей
 SET key value EX 30 — ключ живёт 30 секунд, потом удаляется. Научит: min-heap или time.AfterFunc, background goroutine для eviction, атомарность при concurrent доступе. Очень практично — используется везде (кэши, сессии, rate-limiting).
 
