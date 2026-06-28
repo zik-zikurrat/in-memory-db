@@ -53,9 +53,8 @@ func partition(key []byte, numPartitions int) int {
 }
 
 type Partition struct {
-	mu   sync.RWMutex
-	m    map[string]string
-	next *Partition
+	mu sync.RWMutex
+	m  map[string]string
 }
 
 type Data struct {
