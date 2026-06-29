@@ -48,7 +48,7 @@ func main() {
 	}()
 
 	// Enegine
-	engine := inmemory.NewEngine()
+	engine := inmemory.NewSingleMapEngine()
 	// Storage
 	store := storage.NewStorage(engine, logger)
 	// Compute

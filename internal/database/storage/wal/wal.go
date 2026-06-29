@@ -39,7 +39,7 @@ type WALEvent struct {
 	Done      chan error
 }
 
-func NewWAL(cfg *config.Config, engine *inmemory.Engine, expiryEvent chan expiry.ExpiryEvent) (*WAL, error) {
+func NewWAL(cfg *config.Config, engine *inmemory.SingleMapEngine, expiryEvent chan expiry.ExpiryEvent) (*WAL, error) {
 	dir := cfg.Engine.WAl.DataDir
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		return nil, fmt.Errorf("create wal dir: %w", err)
@@ -189,7 +189,7 @@ func (w *WAL) close() error {
 	return nil
 }
 
-func (w *WAL) restoreBatch(engine *inmemory.Engine) error {
+func (w *WAL) restoreBatch(engine *inmemory.SingleMapEngine) error {
 	logs, err := os.ReadDir(w.DataDir)
 	if err != nil {
 		return err
