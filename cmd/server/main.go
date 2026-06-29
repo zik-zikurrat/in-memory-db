@@ -48,7 +48,7 @@ func main() {
 	}()
 
 	// Enegine
-	engine := inmemory.NewSingleMapEngine()
+	engine := inmemory.NewHashBasedPartitionMapEngine()
 	// Storage
 	store := storage.NewStorage(engine, logger)
 	// Compute

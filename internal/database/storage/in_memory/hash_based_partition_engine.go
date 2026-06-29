@@ -88,13 +88,11 @@ func NewHashBasedPartitionMapEngine() *HashBasedPartitionMapEngine {
 	return &HashBasedPartitionMapEngine{data: NewData()}
 }
 
-func (e *HashBasedPartitionMapEngine) Set(key, value string) bool {
+func (e *HashBasedPartitionMapEngine) Set(key, value string) {
 	p := e.data.bucket(key)
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	_, existed := p.m[key]
 	p.m[key] = value
-	return !existed
 }
 
 func (e *HashBasedPartitionMapEngine) Get(key string) (string, bool) {
@@ -105,8 +103,8 @@ func (e *HashBasedPartitionMapEngine) Get(key string) (string, bool) {
 	return v, ok
 }
 
-func (e *HashBasedPartitionMapEngine) Del(data *Data, key string) bool {
-	p := data.bucket(key)
+func (e *HashBasedPartitionMapEngine) Del(key string) bool {
+	p := e.data.bucket(key)
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	if _, ok := p.m[key]; !ok {
