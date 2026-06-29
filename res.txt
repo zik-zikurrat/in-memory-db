@@ -1,0 +1,66 @@
+goos: darwin
+goarch: arm64
+pkg: in-memory-key-value-db/internal/database/storage/in_memory
+cpu: Apple M4
+BenchmarkMixed_ByWritePct/single/writes=1%-10         	11242581	       108.8 ns/op	      15 B/op	       1 allocs/op
+BenchmarkMixed_ByWritePct/single/writes=1%-10         	11226984	       106.6 ns/op	      15 B/op	       1 allocs/op
+BenchmarkMixed_ByWritePct/single/writes=1%-10         	11521036	       106.7 ns/op	      15 B/op	       1 allocs/op
+BenchmarkMixed_ByWritePct/single/writes=1%-10         	11586514	       103.4 ns/op	      15 B/op	       1 allocs/op
+BenchmarkMixed_ByWritePct/single/writes=1%-10         	11713725	       106.6 ns/op	      15 B/op	       1 allocs/op
+BenchmarkMixed_ByWritePct/single/writes=1%-10         	11508394	       104.5 ns/op	      15 B/op	       1 allocs/op
+BenchmarkMixed_ByWritePct/single/writes=1%-10         	11570827	       105.0 ns/op	      15 B/op	       1 allocs/op
+BenchmarkMixed_ByWritePct/single/writes=1%-10         	11604232	       105.7 ns/op	      15 B/op	       1 allocs/op
+BenchmarkMixed_ByWritePct/single/writes=1%-10         	11565994	       103.8 ns/op	      15 B/op	       1 allocs/op
+BenchmarkMixed_ByWritePct/single/writes=1%-10         	11689255	       111.1 ns/op	      15 B/op	       1 allocs/op
+BenchmarkMixed_ByWritePct/partitioned/writes=1%-10    	24340029	        51.61 ns/op	      15 B/op	       1 allocs/op
+BenchmarkMixed_ByWritePct/partitioned/writes=1%-10    	24718186	        48.19 ns/op	      15 B/op	       1 allocs/op
+BenchmarkMixed_ByWritePct/partitioned/writes=1%-10    	24558606	        50.50 ns/op	      15 B/op	       1 allocs/op
+BenchmarkMixed_ByWritePct/partitioned/writes=1%-10    	24675088	        50.08 ns/op	      15 B/op	       1 allocs/op
+BenchmarkMixed_ByWritePct/partitioned/writes=1%-10    	23384518	        50.24 ns/op	      15 B/op	       1 allocs/op
+BenchmarkMixed_ByWritePct/partitioned/writes=1%-10    	23683314	        51.67 ns/op	      15 B/op	       1 allocs/op
+BenchmarkMixed_ByWritePct/partitioned/writes=1%-10    	23426995	        48.26 ns/op	      15 B/op	       1 allocs/op
+BenchmarkMixed_ByWritePct/partitioned/writes=1%-10    	23202640	        55.29 ns/op	      15 B/op	       1 allocs/op
+BenchmarkMixed_ByWritePct/partitioned/writes=1%-10    	22987165	        56.95 ns/op	      15 B/op	       1 allocs/op
+BenchmarkMixed_ByWritePct/partitioned/writes=1%-10    	23961960	        50.38 ns/op	      15 B/op	       1 allocs/op
+BenchmarkMixed_ByWritePct/single/writes=10%-10        	 9456246	       135.2 ns/op	      15 B/op	       1 allocs/op
+BenchmarkMixed_ByWritePct/single/writes=10%-10        	 9387369	       126.2 ns/op	      15 B/op	       1 allocs/op
+BenchmarkMixed_ByWritePct/single/writes=10%-10        	 9563914	       127.8 ns/op	      15 B/op	       1 allocs/op
+BenchmarkMixed_ByWritePct/single/writes=10%-10        	 8991465	       130.2 ns/op	      15 B/op	       1 allocs/op
+BenchmarkMixed_ByWritePct/single/writes=10%-10        	 9509020	       126.1 ns/op	      15 B/op	       1 allocs/op
+BenchmarkMixed_ByWritePct/single/writes=10%-10        	 9655317	       135.3 ns/op	      15 B/op	       1 allocs/op
+BenchmarkMixed_ByWritePct/single/writes=10%-10        	 9100816	       146.0 ns/op	      15 B/op	       1 allocs/op
+BenchmarkMixed_ByWritePct/single/writes=10%-10        	 9227973	       133.7 ns/op	      15 B/op	       1 allocs/op
+BenchmarkMixed_ByWritePct/single/writes=10%-10        	 9337340	       138.2 ns/op	      15 B/op	       1 allocs/op
+BenchmarkMixed_ByWritePct/single/writes=10%-10        	 9553204	       135.9 ns/op	      15 B/op	       1 allocs/op
+BenchmarkMixed_ByWritePct/partitioned/writes=10%-10   	20698844	        63.44 ns/op	      15 B/op	       1 allocs/op
+BenchmarkMixed_ByWritePct/partitioned/writes=10%-10   	18973768	        58.47 ns/op	      15 B/op	       1 allocs/op
+BenchmarkMixed_ByWritePct/partitioned/writes=10%-10   	21104126	        58.35 ns/op	      15 B/op	       1 allocs/op
+BenchmarkMixed_ByWritePct/partitioned/writes=10%-10   	20939636	        61.44 ns/op	      15 B/op	       1 allocs/op
+BenchmarkMixed_ByWritePct/partitioned/writes=10%-10   	20600577	        60.70 ns/op	      15 B/op	       1 allocs/op
+BenchmarkMixed_ByWritePct/partitioned/writes=10%-10   	21597170	        60.40 ns/op	      15 B/op	       1 allocs/op
+BenchmarkMixed_ByWritePct/partitioned/writes=10%-10   	19740589	        59.56 ns/op	      15 B/op	       1 allocs/op
+BenchmarkMixed_ByWritePct/partitioned/writes=10%-10   	20968664	        64.16 ns/op	      15 B/op	       1 allocs/op
+BenchmarkMixed_ByWritePct/partitioned/writes=10%-10   	20867523	        60.04 ns/op	      15 B/op	       1 allocs/op
+BenchmarkMixed_ByWritePct/partitioned/writes=10%-10   	21078531	        61.34 ns/op	      15 B/op	       1 allocs/op
+BenchmarkMixed_ByWritePct/single/writes=50%-10        	10180756	       124.3 ns/op	      15 B/op	       1 allocs/op
+BenchmarkMixed_ByWritePct/single/writes=50%-10        	 9418927	       126.3 ns/op	      15 B/op	       1 allocs/op
+BenchmarkMixed_ByWritePct/single/writes=50%-10        	10190317	       115.0 ns/op	      15 B/op	       1 allocs/op
+BenchmarkMixed_ByWritePct/single/writes=50%-10        	10265428	       125.1 ns/op	      15 B/op	       1 allocs/op
+BenchmarkMixed_ByWritePct/single/writes=50%-10        	 9842438	       129.2 ns/op	      15 B/op	       1 allocs/op
+BenchmarkMixed_ByWritePct/single/writes=50%-10        	 9924692	       123.1 ns/op	      15 B/op	       1 allocs/op
+BenchmarkMixed_ByWritePct/single/writes=50%-10        	10259361	       121.3 ns/op	      15 B/op	       1 allocs/op
+BenchmarkMixed_ByWritePct/single/writes=50%-10        	 9623110	       125.4 ns/op	      15 B/op	       1 allocs/op
+BenchmarkMixed_ByWritePct/single/writes=50%-10        	 9739702	       125.8 ns/op	      15 B/op	       1 allocs/op
+BenchmarkMixed_ByWritePct/single/writes=50%-10        	 9862959	       121.2 ns/op	      15 B/op	       1 allocs/op
+BenchmarkMixed_ByWritePct/partitioned/writes=50%-10   	15701265	        73.90 ns/op	      15 B/op	       1 allocs/op
+BenchmarkMixed_ByWritePct/partitioned/writes=50%-10   	16237729	        77.90 ns/op	      15 B/op	       1 allocs/op
+BenchmarkMixed_ByWritePct/partitioned/writes=50%-10   	16737432	        80.03 ns/op	      15 B/op	       1 allocs/op
+BenchmarkMixed_ByWritePct/partitioned/writes=50%-10   	16396540	        79.72 ns/op	      15 B/op	       1 allocs/op
+BenchmarkMixed_ByWritePct/partitioned/writes=50%-10   	15846232	        73.86 ns/op	      15 B/op	       1 allocs/op
+BenchmarkMixed_ByWritePct/partitioned/writes=50%-10   	12973533	        77.91 ns/op	      15 B/op	       1 allocs/op
+BenchmarkMixed_ByWritePct/partitioned/writes=50%-10   	15668378	        78.57 ns/op	      15 B/op	       1 allocs/op
+BenchmarkMixed_ByWritePct/partitioned/writes=50%-10   	15554114	        78.64 ns/op	      15 B/op	       1 allocs/op
+BenchmarkMixed_ByWritePct/partitioned/writes=50%-10   	17122513	        76.88 ns/op	      15 B/op	       1 allocs/op
+BenchmarkMixed_ByWritePct/partitioned/writes=50%-10   	17261095	        71.61 ns/op	      15 B/op	       1 allocs/op
+PASS
+ok  	in-memory-key-value-db/internal/database/storage/in_memory	84.214s
