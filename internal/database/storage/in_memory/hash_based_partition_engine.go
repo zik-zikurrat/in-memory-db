@@ -5,8 +5,6 @@ import (
 	"sync"
 )
 
-var partitionCount = runtime.NumCPU()
-
 func murmur2(data []byte) int32 {
 	const (
 		seed uint32 = 0x9747b28c
