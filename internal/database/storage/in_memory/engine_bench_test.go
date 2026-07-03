@@ -39,6 +39,11 @@ func BenchmarkPartitioned_Mixed_Parallel(b *testing.B) {
 	benchMixedParallel(b, e.Get, e.Set, 10)
 }
 
+func BenchmarkSyncMap_Mixed_Parallel(b *testing.B) {
+	e := NewSyncMapEngine()
+	benchMixedParallel(b, e.Get, e.Set, 10)
+}
+
 func BenchmarkPartitioned_Mixed(b *testing.B) {
 	for _, w := range []int{1, 10, 50} {
 		b.Run(fmt.Sprintf("writes=%d%%", w), func(b *testing.B) {
@@ -59,6 +64,10 @@ func BenchmarkMixed_ByWritePct(b *testing.B) {
 		}},
 		{"partitioned", func() (func(string) (string, bool), func(string, string)) {
 			e := NewHashBasedPartitionMapEngine()
+			return e.Get, e.Set
+		}},
+		{"sync", func() (func(string) (string, bool), func(string, string)) {
+			e := NewSyncMapEngine()
 			return e.Get, e.Set
 		}},
 	}
