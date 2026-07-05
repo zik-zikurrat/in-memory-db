@@ -26,6 +26,16 @@ type WALConfig struct {
 	DataDir              string        `yaml:"data_directory"`
 }
 
+type SaveRule struct {
+	Seconds int `yaml:"seconds"`
+	Changes int `yaml:"changes"`
+}
+type Snapshot struct {
+	Save       []SaveRule `yaml:"save"`
+	DBFileName string     `yaml:"dbfilename"`
+	DataDir    string     `yaml:"data_directory"`
+}
+
 type TCPServerConfig struct {
 	Address        string        `yaml:"address"`
 	MaxConnections int           `yaml:"max_connections"`
