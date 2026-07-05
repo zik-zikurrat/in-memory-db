@@ -13,10 +13,11 @@ type Config struct {
 }
 
 type EngineConfig struct {
-	Type    string          `yaml:"type"`
-	Network TCPServerConfig `yaml:"network"`
-	Logging LoggingConfig   `yaml:"logging"`
-	WAl     WALConfig       `yaml:"wal"`
+	Type     string          `yaml:"type"`
+	Network  TCPServerConfig `yaml:"network"`
+	Logging  LoggingConfig   `yaml:"logging"`
+	Snapshot SnapshotConfig  `yaml:"snapshot"`
+	WAl      WALConfig       `yaml:"wal"`
 }
 
 type WALConfig struct {
@@ -30,7 +31,7 @@ type SaveRule struct {
 	Seconds int `yaml:"seconds"`
 	Changes int `yaml:"changes"`
 }
-type Snapshot struct {
+type SnapshotConfig struct {
 	Save       []SaveRule `yaml:"save"`
 	DBFileName string     `yaml:"dbfilename"`
 	DataDir    string     `yaml:"data_directory"`
