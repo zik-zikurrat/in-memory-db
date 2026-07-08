@@ -1,7 +1,6 @@
 package snapshots
 
 import (
-	"context"
 	"in-memory-key-value-db/internal/config"
 	inmemory "in-memory-key-value-db/internal/database/storage/in_memory"
 	"time"
@@ -22,17 +21,5 @@ func NewSnapshot(cfg *config.SnapshotConfig) *Snapshot {
 		save:      save,
 		cnagesCnt: 0,
 		state:     inmemory.Data{},
-	}
-}
-
-func (s *Snapshot) Fork(ctx context.Context, change <-chan struct{}) {
-	// добавить таймеры
-	for {
-		select {
-		case <-change:
-			s.cnagesCnt++
-			// обработать случаи
-		case 
-		}
 	}
 }
