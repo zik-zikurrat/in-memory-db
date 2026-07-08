@@ -1,25 +1,20 @@
 package snapshots
 
 import (
-	"in-memory-key-value-db/internal/config"
-	inmemory "in-memory-key-value-db/internal/database/storage/in_memory"
+	"sync/atomic"
 	"time"
 )
 
 type Snapshot struct {
-	save      map[time.Duration]int
-	cnagesCnt int
-	state     inmemory.Data
+	changesCnt atomic.Int64
+	lastSave   time.Time
+	engine     Snapshotable
 }
 
-func NewSnapshot(cfg *config.SnapshotConfig) *Snapshot {
-	save := make(map[time.Duration]int, len(cfg.Save))
-	for _, rule := range cfg.Save {
-		save[time.Duration(rule.Seconds)*time.Second] = rule.Changes
-	}
+func NewSnapshot(engine Snapshotable) *Snapshot {
 	return &Snapshot{
-		save:      save,
-		cnagesCnt: 0,
-		state:     inmemory.Data{},
+		changesCnt: atomic.Int64{},
+		lastSave:   time.Now(),
+		engine:     engine,
 	}
 }
