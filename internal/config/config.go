@@ -28,8 +28,8 @@ type WALConfig struct {
 }
 
 type SaveRule struct {
-	Seconds int `yaml:"seconds"`
-	Changes int `yaml:"changes"`
+	Seconds time.Duration `yaml:"seconds"`
+	Changes int           `yaml:"changes"`
 }
 type SnapshotConfig struct {
 	Save       []SaveRule `yaml:"save"`

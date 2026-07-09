@@ -16,11 +16,11 @@ engine:
     data_directory: "./data/spider/wal"
   snapshot:
     save:
-      - seconds: 900
+      - seconds: 900s
         changes: 1
-      - seconds: 300
+      - seconds: 300s
         changes: 100
-      - seconds: 60
+      - seconds: 60s
         changes: 10000
     dbfilename: dump.json
     data_directory: ./
