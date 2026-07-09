@@ -39,7 +39,7 @@ func (s *Snapshot) Fork(ctx context.Context, cfg *config.SnapshotConfig, change 
 			for _, rule := range cfg.Save {
 				if s.changesCnt >= rule.Changes &&
 					time.Since(lastSave) >= rule.Seconds {
-					s.engine.Dump()
+					s.engine.Snapshot()
 
 					s.changesCnt = 0
 					lastSave = time.Now()
