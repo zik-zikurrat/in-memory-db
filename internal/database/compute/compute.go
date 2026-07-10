@@ -19,14 +19,16 @@ type Storage interface {
 type Compute struct {
 	storage     Storage
 	walEvents   chan wal.WALEvent
+	changeChan  chan struct{}
 	expiryEvent chan expiry.ExpiryEvent
 	log         *zap.Logger
 }
 
-func NewCompute(storage Storage, log *zap.Logger, walEvents chan wal.WALEvent, expiryEvent chan expiry.ExpiryEvent) *Compute {
+func NewCompute(storage Storage, log *zap.Logger, walEvents chan wal.WALEvent, changeChan chan struct{}, expiryEvent chan expiry.ExpiryEvent) *Compute {
 	return &Compute{
 		storage:     storage,
 		walEvents:   walEvents,
+		changeChan:  changeChan,
 		expiryEvent: expiryEvent,
 		log:         log,
 	}
@@ -46,6 +48,8 @@ func (c *Compute) Handle(input string) (string, error) {
 		zap.String("command", query.Command),
 		zap.Strings("arguments", query.Arguments),
 	)
+
+	c.changeChan <- struct{}{}
 
 	switch query.Command {
 	case SetCommand:

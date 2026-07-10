@@ -115,3 +115,9 @@ func (e *HashBasedPartitionMapEngine) Del(key string) bool {
 func (e *HashBasedPartitionMapEngine) GetBuckets() []*Partition {
 	return e.data.buckets
 }
+
+func (p *Partition) Snapshot() map[string]string {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	return p.m
+}
