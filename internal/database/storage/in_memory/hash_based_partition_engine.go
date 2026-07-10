@@ -111,3 +111,7 @@ func (e *HashBasedPartitionMapEngine) Del(key string) bool {
 	delete(p.m, key)
 	return true
 }
+
+func (e *HashBasedPartitionMapEngine) GetBuckets() []*Partition {
+	return e.data.buckets
+}
