@@ -27,3 +27,7 @@ __debug_bin
 *.log
 .DS_Store
 vendor/
+
+# dumps and wal
+dump.json
+dump.json.tmp
