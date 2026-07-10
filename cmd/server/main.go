@@ -77,7 +77,7 @@ func main() {
 	}()
 
 	// DUMPER
-	dumper := snapshots.NewHashBasedPartitionDumper(engine)
+	dumper := snapshots.NewHashBasedPartitionDumper(cfg.Engine.Snapshot.DataDir, cfg.Engine.Snapshot.DBFileName, engine)
 	// SNAPSHOT
 	snapshotWorker := snapshots.NewSnapshot(dumper)
 	go func() {
