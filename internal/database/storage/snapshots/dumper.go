@@ -15,7 +15,7 @@ type Snapshotable interface {
 }
 
 type HashBasedPartitionDumper struct {
-	mu       sync.Mutex
+	mu       sync.RWMutex
 	engine   *inmemory.HashBasedPartitionMapEngine
 	dumpDir  string
 	dumpFile string
@@ -38,8 +38,8 @@ func (d *HashBasedPartitionDumper) Dump() error {
 	for _, partition := range buckets {
 		go func(partition *inmemory.Partition) {
 			defer wg.Done()
-			d.mu.Lock()
-			defer d.mu.Unlock()
+			d.mu.RLock()
+			defer d.mu.RUnlock()
 			dump = append(dump, partition.Snapshot())
 		}(partition)
 	}
@@ -85,9 +85,11 @@ func (d *HashBasedPartitionDumper) writeDump(dump []map[string]string) error {
 
 func (d *HashBasedPartitionDumper) Load() error {
 	dump, err := os.Open(d.dumpDir + d.dumpFile)
+
 	if err != nil {
 		return err
 	}
+
 	defer dump.Close()
 
 	byteValue, err := io.ReadAll(dump)
@@ -95,10 +97,28 @@ func (d *HashBasedPartitionDumper) Load() error {
 		return err
 	}
 
-	var restore map[string]string
+	var restore []map[string]string
+
 	err = json.Unmarshal([]byte(byteValue), &restore)
 	if err != nil {
 		return err
 	}
+
+	buckets := d.engine.GetBuckets()
+	workers := len(buckets)
+	wg := sync.WaitGroup{}
+	wg.Add(workers)
+	for idx, partition := range buckets {
+		go func(partition *inmemory.Partition) {
+			defer wg.Done()
+			d.mu.Lock()
+			defer d.mu.Unlock()
+			for key, value := range restore[idx] {
+				d.engine.Set(key, value)
+			}
+		}(partition)
+	}
+	wg.Wait()
+
 	return nil
 }

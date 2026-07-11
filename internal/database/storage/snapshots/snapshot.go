@@ -38,6 +38,7 @@ func (s *Snapshot) Fork(ctx context.Context, cfg *config.Config, change <-chan s
 		select {
 
 		case <-ctx.Done():
+			s.logger.Info("context done")
 			return
 
 		case <-change:
