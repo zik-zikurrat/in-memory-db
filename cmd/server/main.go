@@ -114,7 +114,7 @@ func main() {
 	handler := func(request []byte) []byte {
 		response, err := comp.Handle(string(request))
 		if err != nil {
-			return []byte(fmt.Sprintf("ERR: %v", err))
+			return fmt.Appendf(nil, "err: %v", err)
 		}
 		return []byte(response)
 	}
