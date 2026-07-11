@@ -24,7 +24,7 @@ func NewSnapshot(engine Snapshotable) *Snapshot {
 	}
 }
 
-func (s *Snapshot) Fork(ctx context.Context, cfg *config.Config, change <-chan struct{}) {
+func (s *Snapshot) Fork(ctx context.Context, cfg *config.Config, change <-chan struct{}, forcedFlush chan struct{}) {
 	ticker := time.NewTicker(time.Second)
 	defer ticker.Stop()
 
@@ -46,6 +46,7 @@ func (s *Snapshot) Fork(ctx context.Context, cfg *config.Config, change <-chan s
 					if err := s.engine.Dump(); err != nil {
 						s.logger.Error(fmt.Sprintf("error to make dump with %d changes", s.changesCnt), zap.Error(err))
 					}
+					forcedFlush <- struct{}{}
 					s.changesCnt = 0
 					lastSave = time.Now()
 					break

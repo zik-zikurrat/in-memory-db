@@ -33,6 +33,7 @@ func main() {
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 	walEvents := make(chan wal.WALEvent, 100)
 	changeChan := make(chan struct{}, 100)
+	forcedFlush := make(chan struct{}, 1)
 	expiryEvent := make(chan expiry.ExpiryEvent, 100)
 
 	go func() {
@@ -73,7 +74,7 @@ func main() {
 				)
 			}
 		}()
-		walWorker.Run(ctx, wal)
+		walWorker.Run(ctx, wal, forcedFlush)
 	}()
 
 	// DUMPER
@@ -88,7 +89,7 @@ func main() {
 				)
 			}
 		}()
-		snapshotWorker.Fork(ctx, cfg, changeChan)
+		snapshotWorker.Fork(ctx, cfg, changeChan, forcedFlush)
 	}()
 
 	// Expiry

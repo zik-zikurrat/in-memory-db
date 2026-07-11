@@ -14,6 +14,7 @@ type Snapshotable interface {
 }
 
 type HashBasedPartitionDumper struct {
+	mu       sync.Mutex
 	engine   *inmemory.HashBasedPartitionMapEngine
 	dumpDir  string
 	dumpFile string
@@ -33,12 +34,13 @@ func (d *HashBasedPartitionDumper) Dump() error {
 	dump := make([]map[string]string, 0, len(buckets))
 	wg := sync.WaitGroup{}
 	wg.Add(workers)
-
-	for i, partition := range buckets {
-		go func(i int, p *inmemory.Partition) {
+	for _, partition := range buckets {
+		go func(partition *inmemory.Partition) {
 			defer wg.Done()
-			dump[i] = p.Snapshot()
-		}(i, partition)
+			d.mu.Lock()
+			defer d.mu.Unlock()
+			dump = append(dump, partition.Snapshot())
+		}(partition)
 	}
 	wg.Wait()
 

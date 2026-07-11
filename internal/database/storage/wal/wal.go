@@ -127,7 +127,7 @@ func NewWorker(log *zap.Logger, events chan WALEvent) *Worker {
 	}
 }
 
-func (w *Worker) Run(ctx context.Context, wal *WAL) {
+func (w *Worker) Run(ctx context.Context, wal *WAL, flushEvent chan struct{}) {
 	ticker := time.NewTicker(20 * time.Millisecond)
 	defer ticker.Stop()
 
@@ -150,6 +150,9 @@ func (w *Worker) Run(ctx context.Context, wal *WAL) {
 				w.log.Debug("flushing batch by ticker", zap.Int("size", len(wal.Batch)))
 				wal.flushAndNotify(w.log)
 			}
+		case <-flushEvent:
+			w.log.Debug("forced flush butch due to dump")
+			wal.flushAndNotify(w.log)
 		case <-ctx.Done():
 			w.log.Info("context done")
 			for {
