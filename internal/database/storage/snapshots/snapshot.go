@@ -16,11 +16,15 @@ type Snapshot struct {
 	logger     *zap.Logger
 }
 
-func NewSnapshot(engine Snapshotable) *Snapshot {
+func NewSnapshot(engine Snapshotable, logger *zap.Logger) *Snapshot {
+	if err := engine.Load(); err != nil {
+		logger.Error("error while loading dump", zap.Error(err))
+	}
 	return &Snapshot{
 		changesCnt: 0,
 		lastSave:   time.Now(),
 		engine:     engine,
+		logger:     logger,
 	}
 }
 

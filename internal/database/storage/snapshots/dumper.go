@@ -3,6 +3,7 @@ package snapshots
 import (
 	"encoding/json"
 	inmemory "in-memory-key-value-db/internal/database/storage/in_memory"
+	"io"
 	"os"
 	"path/filepath"
 	"sync"
@@ -83,5 +84,21 @@ func (d *HashBasedPartitionDumper) writeDump(dump []map[string]string) error {
 }
 
 func (d *HashBasedPartitionDumper) Load() error {
-	panic("NOT IMPLEMENTED")
+	dump, err := os.Open(d.dumpDir + d.dumpFile)
+	if err != nil {
+		return err
+	}
+	defer dump.Close()
+
+	byteValue, err := io.ReadAll(dump)
+	if err != nil {
+		return err
+	}
+
+	var restore map[string]string
+	err = json.Unmarshal([]byte(byteValue), &restore)
+	if err != nil {
+		return err
+	}
+	return nil
 }

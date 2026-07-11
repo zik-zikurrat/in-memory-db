@@ -41,6 +41,7 @@ func main() {
 		defer close(walEvents)
 		defer close(changeChan)
 		defer close(expiryEvent)
+		defer close(forcedFlush)
 		logger.Info("got os signal", zap.String("signal", sig.String()))
 		cancel()
 	}()
@@ -59,6 +60,20 @@ func main() {
 	store := storage.NewStorage(engine, logger)
 	// Compute
 	comp := compute.NewCompute(store, logger, walEvents, changeChan, expiryEvent)
+	// DUMPER
+	dumper := snapshots.NewHashBasedPartitionDumper(cfg.Engine.Snapshot.DataDir, cfg.Engine.Snapshot.DBFileName, engine)
+	// SNAPSHOT
+	snapshotWorker := snapshots.NewSnapshot(dumper, logger)
+	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				logger.Error("catch panic from goroutine",
+					zap.Any("recovered", r),
+				)
+			}
+		}()
+		snapshotWorker.Fork(ctx, cfg, changeChan, forcedFlush)
+	}()
 	// WAL
 	walWorker := wal.NewWorker(logger, walEvents)
 	wal, err := wal.NewWAL(cfg, engine, expiryEvent)
@@ -75,21 +90,6 @@ func main() {
 			}
 		}()
 		walWorker.Run(ctx, wal, forcedFlush)
-	}()
-
-	// DUMPER
-	dumper := snapshots.NewHashBasedPartitionDumper(cfg.Engine.Snapshot.DataDir, cfg.Engine.Snapshot.DBFileName, engine)
-	// SNAPSHOT
-	snapshotWorker := snapshots.NewSnapshot(dumper)
-	go func() {
-		defer func() {
-			if r := recover(); r != nil {
-				logger.Error("catch panic from goroutine",
-					zap.Any("recovered", r),
-				)
-			}
-		}()
-		snapshotWorker.Fork(ctx, cfg, changeChan, forcedFlush)
 	}()
 
 	// Expiry
