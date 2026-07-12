@@ -1,13 +1,11 @@
 ---
-Tier 1 — конкретная польза, умеренная сложность
+Tier 1 - конкретная польза, умеренная сложность
 (DONE)
 TTL / expiry для ключей
-SET key value EX 30 — ключ живёт 30 секунд, потом удаляется. Научит: min-heap или time.AfterFunc, background goroutine для eviction, атомарность при concurrent доступе. Очень практично — используется везде (кэши, сессии, rate-limiting).
+SET key value EX 30 - ключ живёт 30 секунд, потом удаляется.
 
 (DONE)
 Sharded map вместо одного sync.RWMutex
-Разбиваешь map[string]string на N сегментов (например, 16), каждый со своим mutex. Lock contention падает в N раз. Научит: hash-based partitioning, striped locking — один из самых важных паттернов для высоконагруженного Go-кода.
-Запуск тестов
 ```
     go test -bench=BenchmarkMixed_ByWritePct -benchmem -count=10 -cpu=10 ./internal/database/storage/in_memory > res.txt
     benchstat res.txt
@@ -15,14 +13,12 @@ Sharded map вместо одного sync.RWMutex
 
 (DONE)
 Snapshot (checkpoint) + усечение WAL
-Сейчас при рестарте реплеится весь WAL с нуля — при больших данных это медленно. Добавить периодический снапшот всего состояния (encoding/gob или JSON), а после него WAL обнулять. Научит: сериализация, атомарная запись файлов (write → fsync → rename), coordination с WAL worker'ом.
-Теперь картина ясна. Разберу, что сейчас не так, и как это делают правильно (по образцу Redis RDB).
-
+Сейчас при рестарте реплеится весь WAL с нуля — при больших данных это медленно. Добавить периодический снапшот всего состояния (encoding/gob или JSON), а после него WAL обнулять.
 ---
 Tier 2 — структуры данных
 
 LRU eviction при memory limit
-Когда ключей больше N — выбрасывать наименее недавно использованные. Классика: doubly-linked list + hashmap. Это одна из самых часто задаваемых задач на собеседованиях, но реализация в реальном concurrent коде гораздо интереснее, чем на leetcode.
+Когда ключей больше N - выбрасывать наименее недавно использованные. Классика: doubly-linked list + hashmap. Это одна из самых часто задаваемых задач на собеседованиях, но реализация в реальном concurrent коде гораздо интереснее, чем на leetcode.
 
 Cursor-based SCAN
 SCAN cursor COUNT 100 MATCH user:* — итерация по ключам без блокировки всей БД. Учит lazy iteration, snapshot-at-cursor design, работу с glob-паттернами.
