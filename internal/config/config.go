@@ -9,9 +9,13 @@ import (
 )
 
 type Config struct {
+	Cache  CacheConfig  `yaml:"cache"`
 	Engine EngineConfig `yaml:"engine"`
 }
 
+type CacheConfig struct {
+	limit
+}
 type EngineConfig struct {
 	Type     string          `yaml:"type"`
 	Network  TCPServerConfig `yaml:"network"`
