@@ -34,6 +34,7 @@ func (lru *LRU) Put(key, value string) {
 	elem, ok := lru.kv[key]
 	if !ok {
 		elem = NewElem(value)
+		if len(lru.kv) == int(lru.cache.limit)
 	} else {
 		lru.kv[key].value = value
 	}

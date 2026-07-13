@@ -16,6 +16,7 @@ type Config struct {
 type CacheConfig struct {
 	limit
 }
+
 type EngineConfig struct {
 	Type     string          `yaml:"type"`
 	Network  TCPServerConfig `yaml:"network"`
