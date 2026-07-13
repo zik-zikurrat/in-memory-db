@@ -8,6 +8,7 @@ type Elem struct {
 
 type LRU struct {
 	head  *Elem
+	tail  *Elem
 	cache *Cache
 	kv    map[string]*Elem
 }
@@ -18,8 +19,15 @@ func NewElem(value string) *Elem {
 	}
 }
 
-func NewLRU(size int) *Cache {
-	return nil
+func NewLRU(cache *Cache) *LRU {
+	lru := &LRU{
+		kv:   map[string]*Elem{},
+		head: &Elem{},
+		tail: &Elem{},
+	}
+	lru.head.next = lru.tail
+	lru.tail.prev = lru.head
+	return lru
 }
 
 func (lru *LRU) Put(key, value string) {
