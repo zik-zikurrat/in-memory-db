@@ -8,5 +8,7 @@ type Cache struct {
 }
 
 func NewCache(cfg *config.Config) *Cache {
-	return &Cache{}
+	return &Cache{
+		limit: cfg.Cache.Limit,
+	}
 }

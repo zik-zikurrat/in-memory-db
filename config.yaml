@@ -1,5 +1,5 @@
 cache:
-  limit: 
+  limit: 268435456 #256MB
 engine:
   type: "in_memory"
   network:
@@ -24,7 +24,5 @@ engine:
         changes: 100
       - seconds: 60s
         changes: 10000
-      - seconds: 10s
-        changes: 10
     dbfilename: dump.json
     data_directory: ./
