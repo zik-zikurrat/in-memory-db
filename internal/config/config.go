@@ -14,7 +14,7 @@ type Config struct {
 }
 
 type CacheConfig struct {
-	limit
+	Limit uint64 `yaml:"limit"`
 }
 
 type EngineConfig struct {
