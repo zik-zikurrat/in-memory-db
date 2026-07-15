@@ -1,8 +1,13 @@
 package inmemory
 
 import (
+	"context"
+	"in-memory-key-value-db/internal/config"
 	"runtime"
 	"sync"
+	"time"
+
+	"go.uber.org/zap"
 )
 
 func murmur2(data []byte) int32 {
@@ -54,26 +59,65 @@ func (d *Data) bucket(key string) *Partition {
 	return d.buckets[partition([]byte(key), len(d.buckets))]
 }
 
+type Cache struct {
+	limit uint64
+	used  uint64
+}
+
+func NewCache(cfg *config.CacheConfig) *Cache {
+	return &Cache{
+		limit: cfg.Limit,
+	}
+}
+
+type Elem struct {
+	key   string
+	value string
+	size  uint64
+	next  *Elem
+	prev  *Elem
+}
+
 type Partition struct {
-	mu sync.RWMutex
-	m  map[string]string
+	log   *zap.Logger
+	mu    sync.RWMutex
+	m     map[string]*Elem
+	head  *Elem
+	tail  *Elem
+	used  uint64
+	limit uint64
 }
 
 type Data struct {
 	buckets []*Partition
 }
 
-func NewPartition(key string, value interface{}) *Partition {
-	return &Partition{
-		m: make(map[string]string),
+func NewElem(key, value string) *Elem {
+	return &Elem{
+		key:   key,
+		value: value,
+		size:  uint64(len(key) + len(value)),
 	}
 }
 
-func NewData() *Data {
+func NewData(ctx context.Context, cache *Cache, log *zap.Logger) *Data {
 	n := runtime.NumCPU()
+
+	limitPerPartition := cache.limit / uint64(n)
+
 	d := &Data{buckets: make([]*Partition, n)}
+
 	for i := range n {
-		d.buckets[i] = &Partition{m: make(map[string]string)}
+		p := &Partition{
+			m:     make(map[string]*Elem),
+			limit: limitPerPartition,
+			log:   log,
+		}
+		d.buckets[i] = p
+
+		go func(part *Partition) {
+			part.checkPartitionLimit(ctx)
+		}(p)
 	}
 	return d
 }
@@ -82,33 +126,58 @@ type HashBasedPartitionMapEngine struct {
 	data *Data
 }
 
-func NewHashBasedPartitionMapEngine() *HashBasedPartitionMapEngine {
-	return &HashBasedPartitionMapEngine{data: NewData()}
+func NewHashBasedPartitionMapEngine(ctx context.Context, cache *Cache, log *zap.Logger) *HashBasedPartitionMapEngine {
+	return &HashBasedPartitionMapEngine{data: NewData(ctx, cache, log)}
 }
 
 func (e *HashBasedPartitionMapEngine) Set(key, value string) {
 	p := e.data.bucket(key)
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	p.m[key] = value
+
+	elem, ok := p.m[key]
+	if ok {
+		newSize := uint64(len(key) + len(value))
+		oldSize := elem.size
+		elem.value = value
+		elem.size = newSize
+
+		p.used = p.used - oldSize + newSize
+		p.promote(elem)
+		return
+	}
+
+	elem = NewElem(key, value)
+	p.m[key] = elem
+	p.used += elem.size
+	p.append(elem)
 }
 
 func (e *HashBasedPartitionMapEngine) Get(key string) (string, bool) {
 	p := e.data.bucket(key)
-	p.mu.RLock()
-	defer p.mu.RUnlock()
-	v, ok := p.m[key]
-	return v, ok
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	elem, ok := p.m[key]
+	if !ok {
+		return "", false
+	}
+
+	p.promote(elem)
+	return elem.value, true
 }
 
 func (e *HashBasedPartitionMapEngine) Del(key string) bool {
 	p := e.data.bucket(key)
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	if _, ok := p.m[key]; !ok {
+	elem, ok := p.m[key]
+	if !ok {
 		return false
 	}
+
 	delete(p.m, key)
+	p.used -= elem.size
+	p.detach(elem)
 	return true
 }
 
@@ -119,5 +188,89 @@ func (e *HashBasedPartitionMapEngine) GetBuckets() []*Partition {
 func (p *Partition) Snapshot() map[string]string {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
-	return p.m
+	snap := make(map[string]string, len(p.m))
+	for k, v := range p.m {
+		snap[k] = v.value
+	}
+	return snap
+}
+
+// LRU METHODS
+func (p *Partition) promote(elem *Elem) {
+	if elem == p.tail {
+		return
+	}
+
+	p.detach(elem)
+	p.append(elem)
+}
+
+func (p *Partition) append(elem *Elem) {
+	elem.next = nil
+	elem.prev = p.tail
+
+	if p.tail != nil {
+		p.tail.next = elem
+	} else {
+		p.head = elem
+	}
+
+	p.tail = elem
+}
+
+func (p *Partition) detach(elem *Elem) {
+	if elem.prev != nil {
+		elem.prev.next = elem.next
+	} else {
+		p.head = elem.next
+	}
+
+	if elem.next != nil {
+		elem.next.prev = elem.prev
+	} else {
+		p.tail = elem.prev
+	}
+	elem.prev = nil
+	elem.next = nil
+}
+
+func (p *Partition) checkPartitionLimit(ctx context.Context) {
+	ticker := time.NewTicker(time.Millisecond * 500)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ticker.C:
+			p.evitctIfNeeded()
+		case <-ctx.Done():
+			p.log.Info("context done")
+			return
+		}
+	}
+}
+
+func (p *Partition) evitctIfNeeded() {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	for p.used > p.limit && p.head != nil {
+		p.deleteLeastActive()
+	}
+}
+
+func (p *Partition) deleteLeastActive() {
+	victim := p.head
+	if victim == nil {
+		return
+	}
+
+	delete(p.m, victim.key)
+
+	p.used -= victim.size
+
+	p.head = victim.next
+	if p.head != nil {
+		p.head.prev = nil
+	} else {
+		p.tail = nil
+	}
 }

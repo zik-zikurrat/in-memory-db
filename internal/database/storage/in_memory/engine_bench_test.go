@@ -1,13 +1,30 @@
 package inmemory
 
 import (
+	"context"
 	"fmt"
 	"math/rand"
 	"strconv"
 	"testing"
+
+	"go.uber.org/zap"
 )
 
 var sink string
+
+const (
+	_defaultCacheLimit = 268435456 // 256MB
+)
+
+func helperNewPartitionEngine(ctx context.Context) *HashBasedPartitionMapEngine {
+	noopLogger := zap.NewNop()
+
+	testCache := &Cache{
+		limit: _defaultCacheLimit,
+	}
+
+	return NewHashBasedPartitionMapEngine(ctx, testCache, noopLogger)
+}
 
 func benchMixedParallel(b *testing.B, get func(string) (string, bool), set func(string, string), writePct int) {
 	const keyspace = 100_000
@@ -35,7 +52,10 @@ func BenchmarkSingle_Mixed_Parallel(b *testing.B) {
 }
 
 func BenchmarkPartitioned_Mixed_Parallel(b *testing.B) {
-	e := NewHashBasedPartitionMapEngine()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	e := helperNewPartitionEngine(ctx)
 	benchMixedParallel(b, e.Get, e.Set, 10)
 }
 
@@ -47,13 +67,23 @@ func BenchmarkSyncMap_Mixed_Parallel(b *testing.B) {
 func BenchmarkPartitioned_Mixed(b *testing.B) {
 	for _, w := range []int{1, 10, 50} {
 		b.Run(fmt.Sprintf("writes=%d%%", w), func(b *testing.B) {
-			e := NewHashBasedPartitionMapEngine()
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+
+			e := helperNewPartitionEngine(ctx)
 			benchMixedParallel(b, e.Get, e.Set, w)
 		})
 	}
 }
 
 func BenchmarkMixed_ByWritePct(b *testing.B) {
+	var cancels []context.CancelFunc
+	defer func() {
+		for _, cancel := range cancels {
+			cancel()
+		}
+	}()
+
 	engines := []struct {
 		name string
 		new  func() (get func(string) (string, bool), set func(string, string))
@@ -63,7 +93,10 @@ func BenchmarkMixed_ByWritePct(b *testing.B) {
 			return e.Get, e.Set
 		}},
 		{"partitioned", func() (func(string) (string, bool), func(string, string)) {
-			e := NewHashBasedPartitionMapEngine()
+			ctx, cancel := context.WithCancel(context.Background())
+			cancels = append(cancels, cancel)
+
+			e := helperNewPartitionEngine(ctx)
 			return e.Get, e.Set
 		}},
 		{"sync", func() (func(string) (string, bool), func(string, string)) {
@@ -71,6 +104,7 @@ func BenchmarkMixed_ByWritePct(b *testing.B) {
 			return e.Get, e.Set
 		}},
 	}
+
 	for _, w := range []int{1, 10, 50} {
 		for _, eng := range engines {
 			b.Run(fmt.Sprintf("%s/writes=%d%%", eng.name, w), func(b *testing.B) {
