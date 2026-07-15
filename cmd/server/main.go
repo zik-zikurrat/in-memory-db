@@ -11,6 +11,7 @@ import (
 	"in-memory-key-value-db/internal/database/compute"
 	"in-memory-key-value-db/internal/database/network"
 	"in-memory-key-value-db/internal/database/storage"
+	"in-memory-key-value-db/internal/database/storage/cache"
 	"in-memory-key-value-db/internal/database/storage/expiry"
 	inmemory "in-memory-key-value-db/internal/database/storage/in_memory"
 	"in-memory-key-value-db/internal/database/storage/snapshots"
@@ -52,6 +53,15 @@ func main() {
 	// sync может вернуть ошибку, мы ее игнорируем
 	defer func() {
 		_ = logger.Sync()
+	}()
+
+	// Cache
+	sys_cache := cache.NewCache(cfg)
+	// LRU
+	lru := cache.NewLRU(sys_cache)
+
+	go func() {
+		lru.CheckCacheLimit(ctx, logger)
 	}()
 
 	// Enegine
