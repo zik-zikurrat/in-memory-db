@@ -3,7 +3,6 @@ package snapshots
 import (
 	"encoding/json"
 	inmemory "in-memory-key-value-db/internal/database/storage/in_memory"
-	"io"
 	"os"
 	"path/filepath"
 	"sync"
@@ -15,7 +14,7 @@ type Snapshotable interface {
 }
 
 type HashBasedPartitionDumper struct {
-	mu       sync.RWMutex
+	mu       sync.Mutex
 	engine   *inmemory.HashBasedPartitionMapEngine
 	dumpDir  string
 	dumpFile string
@@ -31,94 +30,97 @@ func NewHashBasedPartitionDumper(dumpDir, dumpFile string, engine *inmemory.Hash
 
 func (d *HashBasedPartitionDumper) Dump() error {
 	buckets := d.engine.GetBuckets()
-	workers := len(buckets)
-	dump := make([]map[string]string, 0, len(buckets))
+	dump := make([]map[string]string, len(buckets))
 	wg := sync.WaitGroup{}
-	wg.Add(workers)
-	for _, partition := range buckets {
-		go func(partition *inmemory.Partition) {
+	wg.Add(len(buckets))
+
+	for index, partition := range buckets {
+		go func(
+			index int,
+			partition *inmemory.Partition,
+		) {
 			defer wg.Done()
-			d.mu.RLock()
-			defer d.mu.RUnlock()
-			dump = append(dump, partition.Snapshot())
-		}(partition)
+			dump[index] = partition.Snapshot()
+		}(index, partition)
 	}
 	wg.Wait()
 
-	if err := d.writeDump(dump); err != nil {
+	return d.writeDump(dump)
+}
+
+func (d *HashBasedPartitionDumper) writeDump(
+	dump []map[string]string,
+) error {
+	if err := os.MkdirAll(d.dumpDir, 0o755); err != nil {
 		return err
 	}
+
+	tmpFile, err := os.CreateTemp(
+		d.dumpDir,
+		"."+d.dumpFile+".*.tmp",
+	)
+	if err != nil {
+		return err
+	}
+
+	tmpPath := tmpFile.Name()
+	finalPath := filepath.Join(d.dumpDir, d.dumpFile)
+
+	committed := false
+
+	defer func() {
+		_ = tmpFile.Close()
+
+		if !committed {
+			_ = os.Remove(tmpPath)
+		}
+	}()
+
+	encoder := json.NewEncoder(tmpFile)
+
+	if err := encoder.Encode(dump); err != nil {
+		return err
+	}
+
+	if err := tmpFile.Sync(); err != nil {
+		return err
+	}
+
+	if err := tmpFile.Close(); err != nil {
+		return err
+	}
+
+	if err := os.Rename(tmpPath, finalPath); err != nil {
+		return err
+	}
+
+	committed = true
 
 	return nil
 }
 
-func (d *HashBasedPartitionDumper) writeDump(dump []map[string]string) error {
-	tmpPath := filepath.Join(d.dumpDir, d.dumpFile+".tmp")
-	finalPath := filepath.Join(d.dumpDir, d.dumpFile)
-
-	data, err := json.Marshal(dump)
-	if err != nil {
-		return err
-	}
-
-	f, err := os.OpenFile(tmpPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o644)
-	if err != nil {
-		return err
-	}
-
-	if _, err := f.Write(data); err != nil {
-		f.Close()
-		return err
-	}
-
-	if err := f.Sync(); err != nil {
-		f.Close()
-		return err
-	}
-
-	if err := f.Close(); err != nil {
-		return err
-	}
-
-	return os.Rename(tmpPath, finalPath)
-}
-
 func (d *HashBasedPartitionDumper) Load() error {
-	dump, err := os.Open(d.dumpDir + d.dumpFile)
+	d.mu.Lock()
+	defer d.mu.Unlock()
 
-	if err != nil {
-		return err
-	}
+	dumpPath := filepath.Join(d.dumpDir, d.dumpFile)
 
-	defer dump.Close()
-
-	byteValue, err := io.ReadAll(dump)
+	data, err := os.ReadFile(dumpPath)
 	if err != nil {
 		return err
 	}
 
 	var restore []map[string]string
 
-	err = json.Unmarshal([]byte(byteValue), &restore)
-	if err != nil {
+	if err := json.Unmarshal(data, &restore); err != nil {
 		return err
 	}
 
-	buckets := d.engine.GetBuckets()
-	workers := len(buckets)
-	wg := sync.WaitGroup{}
-	wg.Add(workers)
-	for idx, partition := range buckets {
-		go func(partition *inmemory.Partition) {
-			defer wg.Done()
-			d.mu.Lock()
-			defer d.mu.Unlock()
-			for key, value := range restore[idx] {
-				d.engine.Set(key, value)
-			}
-		}(partition)
+	for _, partitionDump := range restore {
+		for key, value := range partitionDump {
+			d.engine.Set(key, value)
+		}
 	}
-	wg.Wait()
 
 	return nil
 }
