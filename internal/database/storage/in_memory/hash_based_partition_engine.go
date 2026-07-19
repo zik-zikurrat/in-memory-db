@@ -240,7 +240,7 @@ func (p *Partition) checkPartitionLimit(ctx context.Context) {
 	for {
 		select {
 		case <-ticker.C:
-			p.evitctIfNeeded()
+			p.evictIfNeeded()
 		case <-ctx.Done():
 			p.log.Info("context done")
 			return
@@ -248,7 +248,7 @@ func (p *Partition) checkPartitionLimit(ctx context.Context) {
 	}
 }
 
-func (p *Partition) evitctIfNeeded() {
+func (p *Partition) evictIfNeeded() {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
