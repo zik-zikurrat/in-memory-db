@@ -56,7 +56,7 @@ func main() {
 
 	// Enegine
 	cache := inmemory.NewCache(&cfg.Cache)
-	engine := inmemory.NewHashBasedPartitionMapEngine(ctx, cache, logger)
+	engine := inmemory.NewHashBasedPartitionMapEngine(ctx, cache, walEvents, logger)
 	// Storage
 	store := storage.NewStorage(engine, logger)
 	// Compute

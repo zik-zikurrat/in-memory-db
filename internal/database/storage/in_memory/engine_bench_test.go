@@ -3,6 +3,7 @@ package inmemory
 import (
 	"context"
 	"fmt"
+	"in-memory-key-value-db/internal/database/storage/wal"
 	"math/rand"
 	"strconv"
 	"testing"
@@ -17,13 +18,14 @@ const (
 )
 
 func helperNewPartitionEngine(ctx context.Context) *HashBasedPartitionMapEngine {
+	walEvents := make(chan wal.WALEvent, 100)
 	noopLogger := zap.NewNop()
 
 	testCache := &Cache{
 		limit: _defaultCacheLimit,
 	}
 
-	return NewHashBasedPartitionMapEngine(ctx, testCache, noopLogger)
+	return NewHashBasedPartitionMapEngine(ctx, testCache, walEvents, noopLogger)
 }
 
 func benchMixedParallel(b *testing.B, get func(string) (string, bool), set func(string, string), writePct int) {

@@ -36,6 +36,7 @@ type Worker struct {
 type WALEvent struct {
 	Command   string
 	Arguments []string
+	Tombstone bool
 	Done      chan error
 }
 
@@ -137,9 +138,16 @@ func (w *Worker) Run(ctx context.Context, wal *WAL, flushEvent chan struct{}) {
 			w.log.Info("got event",
 				zap.Int("offset", wal.Offset),
 				zap.String("command", event.Command),
+				zap.Bool("tombstone", event.Tombstone),
 				zap.String("argument", strings.Join(event.Arguments, " ")),
 			)
-			wal.Batch = append(wal.Batch, fmt.Sprintf("%s %s", event.Command, strings.Join(event.Arguments, " ")))
+			record := ""
+			if event.Tombstone {
+				record = fmt.Sprintf("TOMBSTONE %s %s", event.Command, strings.Join(event.Arguments, " "))
+			} else {
+				record = fmt.Sprintf("%s %s", event.Command, strings.Join(event.Arguments, " "))
+			}
+			wal.Batch = append(wal.Batch, record)
 			wal.Pending = append(wal.Pending, event.Done)
 			wal.Offset++
 			if wal.isBatchFull() {
@@ -197,7 +205,12 @@ func (w *WAL) restoreBatch(engine storage.Engine) error {
 	if err != nil {
 		return err
 	}
-
+	segmentsToDel := make([]os.DirEntry, 0, len(logs))
+	defer func() {
+		for _, file := range segmentsToDel {
+			_ = os.Remove(fmt.Sprintf("%s/%s", w.DataDir, file.Name()))
+		}
+	}()
 	for _, logFile := range logs {
 		path := filepath.Join(w.DataDir, logFile.Name())
 
@@ -232,9 +245,15 @@ func (w *WAL) restoreBatch(engine storage.Engine) error {
 						continue
 					}
 					engine.Del(query[1])
+				case "TOMBSTONE":
+					if len(query) < 4 {
+						continue
+					}
+					engine.Set(query[2], query[3])
 				}
 			}
 		}
+		segmentsToDel = append(segmentsToDel, logFile)
 	}
 	return nil
 }

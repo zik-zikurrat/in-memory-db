@@ -3,11 +3,16 @@ package inmemory
 import (
 	"context"
 	"in-memory-key-value-db/internal/config"
+	"in-memory-key-value-db/internal/database/storage/wal"
 	"runtime"
 	"sync"
 	"time"
 
 	"go.uber.org/zap"
+)
+
+const (
+	_defaultRetry = 5
 )
 
 func murmur2(data []byte) int32 {
@@ -79,13 +84,14 @@ type Elem struct {
 }
 
 type Partition struct {
-	log   *zap.Logger
-	mu    sync.RWMutex
-	m     map[string]*Elem
-	head  *Elem
-	tail  *Elem
-	used  uint64
-	limit uint64
+	log       *zap.Logger
+	walEvents chan wal.WALEvent
+	mu        sync.RWMutex
+	m         map[string]*Elem
+	head      *Elem
+	tail      *Elem
+	used      uint64
+	limit     uint64
 }
 
 type Data struct {
@@ -100,7 +106,7 @@ func NewElem(key, value string) *Elem {
 	}
 }
 
-func NewData(ctx context.Context, cache *Cache, log *zap.Logger) *Data {
+func NewData(ctx context.Context, cache *Cache, walEvents chan wal.WALEvent, log *zap.Logger) *Data {
 	n := runtime.NumCPU()
 
 	limitPerPartition := cache.limit / uint64(n)
@@ -109,9 +115,10 @@ func NewData(ctx context.Context, cache *Cache, log *zap.Logger) *Data {
 
 	for i := range n {
 		p := &Partition{
-			m:     make(map[string]*Elem),
-			limit: limitPerPartition,
-			log:   log,
+			walEvents: walEvents,
+			m:         make(map[string]*Elem),
+			limit:     limitPerPartition,
+			log:       log,
 		}
 		d.buckets[i] = p
 
@@ -126,8 +133,8 @@ type HashBasedPartitionMapEngine struct {
 	data *Data
 }
 
-func NewHashBasedPartitionMapEngine(ctx context.Context, cache *Cache, log *zap.Logger) *HashBasedPartitionMapEngine {
-	return &HashBasedPartitionMapEngine{data: NewData(ctx, cache, log)}
+func NewHashBasedPartitionMapEngine(ctx context.Context, cache *Cache, walEvents chan wal.WALEvent, log *zap.Logger) *HashBasedPartitionMapEngine {
+	return &HashBasedPartitionMapEngine{data: NewData(ctx, cache, walEvents, log)}
 }
 
 func (e *HashBasedPartitionMapEngine) Set(key, value string) {
@@ -253,14 +260,34 @@ func (p *Partition) evictIfNeeded() {
 	defer p.mu.Unlock()
 
 	for p.used > p.limit && p.head != nil {
-		p.deleteLeastActive()
+		if err := p.deleteLeastActive(); err != nil {
+			cnt := 0
+			for cnt <= _defaultRetry {
+				if err := p.deleteLeastActive(); err != nil {
+					cnt++
+				}
+			}
+			continue
+		}
 	}
 }
 
-func (p *Partition) deleteLeastActive() {
+func (p *Partition) deleteLeastActive() error {
 	victim := p.head
 	if victim == nil {
-		return
+		return nil
+	}
+
+	done := make(chan error, 1)
+	p.walEvents <- wal.WALEvent{
+		Command:   "DEL",
+		Arguments: []string{victim.key, victim.value},
+		Tombstone: true,
+		Done:      done,
+	}
+	if err := <-done; err != nil {
+		p.log.Error("wal write tombstone failed", zap.Error(err))
+		return err
 	}
 
 	delete(p.m, victim.key)
@@ -273,4 +300,6 @@ func (p *Partition) deleteLeastActive() {
 	} else {
 		p.tail = nil
 	}
+
+	return nil
 }
