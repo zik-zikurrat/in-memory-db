@@ -49,10 +49,9 @@ func (c *Compute) Handle(input string) (string, error) {
 		zap.Strings("arguments", query.Arguments),
 	)
 
-	c.changeChan <- struct{}{}
-
 	switch query.Command {
 	case SetCommand:
+		c.changeChan <- struct{}{}
 		n, err := strconv.Atoi(query.Arguments[2])
 		if err != nil {
 			return "", fmt.Errorf("error converting ttl to int")
@@ -92,6 +91,7 @@ func (c *Compute) Handle(input string) (string, error) {
 		return value, nil
 
 	case DelCommand:
+		c.changeChan <- struct{}{}
 		done := make(chan error, 1)
 		c.walEvents <- wal.WALEvent{
 			Command:   query.Command,

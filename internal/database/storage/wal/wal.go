@@ -16,16 +16,17 @@ import (
 )
 
 type WAL struct {
-	Offset          int
-	Batch           []string
-	Pending         []chan error
-	MaxBatchSize    int64
-	DataDir         string
-	MaxSegmentSize  int64
-	CurrSegmentPath string
-	CurrSegment     *os.File
-	CurrSegmentSize int64
-	expiryEvent     chan expiry.ExpiryEvent
+	Offset               int
+	Batch                []string
+	Pending              []chan error
+	MaxBatchSize         int64
+	DataDir              string
+	MaxSegmentSize       int64
+	CurrSegmentPath      string
+	CurrSegment          *os.File
+	CurrSegmentSize      int64
+	FlushingBatchTimeout time.Duration
+	expiryEvent          chan expiry.ExpiryEvent
 }
 
 type Worker struct {
@@ -47,11 +48,12 @@ func NewWAL(cfg *config.Config, engine storage.Engine, expiryEvent chan expiry.E
 	}
 
 	w := &WAL{
-		Batch:          make([]string, 0, cfg.Engine.WAl.FlushingBatchSize),
-		MaxBatchSize:   cfg.Engine.WAl.FlushingBatchSize,
-		MaxSegmentSize: cfg.Engine.WAl.MaxSegmentSize,
-		DataDir:        dir,
-		expiryEvent:    expiryEvent,
+		Batch:                make([]string, 0, cfg.Engine.WAl.FlushingBatchSize),
+		MaxBatchSize:         cfg.Engine.WAl.FlushingBatchSize,
+		MaxSegmentSize:       cfg.Engine.WAl.MaxSegmentSize,
+		DataDir:              dir,
+		FlushingBatchTimeout: cfg.Engine.WAl.FlushingBatchTimeout,
+		expiryEvent:          expiryEvent,
 	}
 	if err := w.restoreBatch(engine); err != nil {
 		return nil, err
@@ -129,7 +131,7 @@ func NewWorker(log *zap.Logger, events chan WALEvent) *Worker {
 }
 
 func (w *Worker) Run(ctx context.Context, wal *WAL, flushEvent chan struct{}) {
-	ticker := time.NewTicker(20 * time.Millisecond)
+	ticker := time.NewTicker(wal.FlushingBatchTimeout)
 	defer ticker.Stop()
 
 	for {
@@ -236,7 +238,7 @@ func (w *WAL) restoreBatch(engine storage.Engine) error {
 					d := time.Duration(n) * time.Second
 
 					w.expiryEvent <- expiry.ExpiryEvent{
-						Key:  query[0],
+						Key:  query[1],
 						Time: d,
 					}
 					engine.Set(query[1], query[2])
@@ -249,7 +251,7 @@ func (w *WAL) restoreBatch(engine storage.Engine) error {
 					if len(query) < 4 {
 						continue
 					}
-					engine.Set(query[2], query[3])
+					engine.Del(query[2])
 				}
 			}
 		}

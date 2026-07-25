@@ -265,6 +265,8 @@ func (p *Partition) evictIfNeeded() {
 			for cnt <= _defaultRetry {
 				if err := p.deleteLeastActive(); err != nil {
 					cnt++
+				} else {
+					break
 				}
 			}
 			continue
