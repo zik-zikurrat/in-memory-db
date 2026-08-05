@@ -284,7 +284,6 @@ func (p *Partition) deleteLeastActive() error {
 	p.walEvents <- wal.WALEvent{
 		Command:   "DEL",
 		Arguments: []string{victim.key, victim.value},
-		Tombstone: true,
 		Done:      done,
 	}
 	if err := <-done; err != nil {

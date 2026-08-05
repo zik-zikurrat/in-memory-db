@@ -68,7 +68,6 @@ func (c *Compute) Handle(input string) (string, error) {
 		c.walEvents <- wal.WALEvent{
 			Command:   query.Command,
 			Arguments: query.Arguments,
-			Tombstone: false,
 			Done:      done,
 		}
 		if err := <-done; err != nil {
@@ -96,7 +95,6 @@ func (c *Compute) Handle(input string) (string, error) {
 		c.walEvents <- wal.WALEvent{
 			Command:   query.Command,
 			Arguments: query.Arguments,
-			Tombstone: false,
 			Done:      done,
 		}
 		if err := <-done; err != nil {
