@@ -188,6 +188,10 @@ func (e *HashBasedPartitionMapEngine) Del(key string) bool {
 	return true
 }
 
+func (e *HashBasedPartitionMapEngine) Scan(cursor int) []string {
+	panic("not implemented")
+}
+
 func (e *HashBasedPartitionMapEngine) GetBuckets() []*Partition {
 	return e.data.buckets
 }

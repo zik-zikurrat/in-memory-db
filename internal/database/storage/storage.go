@@ -12,6 +12,7 @@ type Engine interface {
 	Set(key, value string)
 	Get(key string) (string, bool)
 	Del(key string) bool
+	Scan(cursor int) []string
 }
 
 type Storage struct {
@@ -52,4 +53,8 @@ func (s *Storage) Del(key string) error {
 	}
 	s.log.Debug("del ok", zap.String("key", key))
 	return nil
+}
+
+func (s *Storage) Scan(cursor int) []string {
+	panic("not implemented")
 }

@@ -14,6 +14,7 @@ type Storage interface {
 	Set(key, value string) error
 	Get(key string) (string, error)
 	Del(key string) error
+	Scan(cursor int) []string
 }
 
 type Compute struct {
@@ -88,6 +89,8 @@ func (c *Compute) Handle(input string) (string, error) {
 			return "", err
 		}
 		return value, nil
+
+	case ScanCommand:
 
 	case DelCommand:
 		c.changeChan <- struct{}{}
