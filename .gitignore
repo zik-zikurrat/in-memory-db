@@ -16,11 +16,13 @@ vendor/
 
 # IDE
 .vscode
+.idea
 semaphore.go
 
 *.env
 config/
 .env*
+qodana.yaml
 
 __debug_bin
 
