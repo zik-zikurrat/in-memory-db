@@ -33,7 +33,7 @@ func main() {
 
 	defer signal.Stop(sigChan)
 
-	fmt.Println("type SET / GET / DEL or 'exit' to quit")
+	fmt.Println("type SET / GET / DEL / KEYS / SCAN or 'exit' to quit")
 
 	client, err := network.NewTCPClient(*address, *idleTimeout, *maxMessageSize)
 	if err != nil {
