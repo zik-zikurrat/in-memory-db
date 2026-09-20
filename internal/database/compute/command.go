@@ -9,7 +9,7 @@ const (
 )
 
 var commandArity = map[string]int{
-	SetCommand:  3,
+	SetCommand:  4,
 	GetCommand:  1,
 	DelCommand:  1,
 	ScanCommand: 4,

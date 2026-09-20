@@ -30,8 +30,13 @@ func ParseQuery(input string) (Query, error) {
 	args := fields[1:]
 	if len(args) != arity {
 		if cmd == "SET" {
-			args = append(args, DefaultExpiry)
+			if len(fields) == 3 {
+				args = append(args, DefaultExpiry)
+			}
 			return Query{Command: cmd, Arguments: args}, nil
+		}
+		if cmd == "KEYS" {
+			args = append(args)
 		}
 		return Query{}, ErrInvalidArguments
 	}

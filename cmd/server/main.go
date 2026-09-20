@@ -54,7 +54,7 @@ func main() {
 		_ = logger.Sync()
 	}()
 
-	// Enegine
+	// Engine
 	cache := inmemory.NewCache(&cfg.Cache)
 	engine := inmemory.NewHashBasedPartitionMapEngine(ctx, cache, walEvents, logger)
 	// Storage
