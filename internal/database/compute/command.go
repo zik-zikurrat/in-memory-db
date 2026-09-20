@@ -9,10 +9,15 @@ const (
 	KeysCommand = "KEYS"
 )
 
-var commandArity = map[string]int{
-	SetCommand:  4,
-	GetCommand:  1,
-	DelCommand:  1,
-	ScanCommand: 4,
-	KeysCommand: 2,
+type arity struct {
+	min int
+	max int
+}
+
+var commandArity = map[string]arity{
+	SetCommand:  {min: 2, max: 3}, // key value [ttl]
+	GetCommand:  {min: 1, max: 1}, // key
+	DelCommand:  {min: 1, max: 1}, // key
+	ScanCommand: {min: 1, max: 1}, // cursor
+	KeysCommand: {min: 0, max: 1}, // [pattern], по умолчанию "*"
 }

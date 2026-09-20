@@ -6,7 +6,8 @@ import (
 )
 
 const (
-	DefaultExpiry = "0"
+	DefaultExpiry  = "0"
+	DefaultPattern = "*"
 )
 
 var (
@@ -21,24 +22,26 @@ func ParseQuery(input string) (Query, error) {
 		return Query{}, ErrEmptyQuery
 	}
 
-	cmd := fields[0]
-	arity, ok := commandArity[cmd]
+	cmd := strings.ToUpper(fields[0])
+	a, ok := commandArity[cmd]
 	if !ok {
 		return Query{}, ErrUnknownCommand
 	}
 
 	args := fields[1:]
-	if len(args) != arity {
-		if cmd == "SET" {
-			if len(fields) == 3 {
-				args = append(args, DefaultExpiry)
-			}
-			if len(fields) < 3 {
-				return Query{}, ErrInvalidArguments
-			}
-			return Query{Command: cmd, Arguments: args}, nil
-		}
+	if len(args) < a.min || len(args) > a.max {
 		return Query{}, ErrInvalidArguments
+	}
+
+	switch cmd {
+	case SetCommand:
+		if len(args) == 2 {
+			args = append(args, DefaultExpiry)
+		}
+	case KeysCommand:
+		if len(args) == 0 {
+			args = append(args, DefaultPattern)
+		}
 	}
 
 	return Query{Command: cmd, Arguments: args}, nil
