@@ -4,11 +4,8 @@ import (
 	"context"
 	"fmt"
 	"in-memory-key-value-db/internal/config"
-	"in-memory-key-value-db/internal/database/storage"
-	"in-memory-key-value-db/internal/database/storage/expiry"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"time"
 
@@ -16,6 +13,7 @@ import (
 )
 
 type WAL struct {
+	log                  *zap.Logger
 	Offset               int
 	Batch                []string
 	Pending              []chan error
@@ -26,41 +24,76 @@ type WAL struct {
 	CurrSegment          *os.File
 	CurrSegmentSize      int64
 	FlushingBatchTimeout time.Duration
-	expiryEvent          chan expiry.ExpiryEvent
+	events               chan record
 }
 
 type Worker struct {
 	log    *zap.Logger
-	events chan WALEvent
+	events chan record
 }
 
-type WALEvent struct {
+type record struct {
 	Command   string
 	Arguments []string
 	Done      chan error
 }
 
-func NewWAL(cfg *config.Config, engine storage.Engine, expiryEvent chan expiry.ExpiryEvent) (*WAL, error) {
+func NewWAL(cfg *config.Config, log *zap.Logger) (*WAL, error) {
 	dir := cfg.Engine.WAl.DataDir
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		return nil, fmt.Errorf("create wal dir: %w", err)
 	}
 
 	w := &WAL{
+		log:                  log,
 		Batch:                make([]string, 0, cfg.Engine.WAl.FlushingBatchSize),
 		MaxBatchSize:         cfg.Engine.WAl.FlushingBatchSize,
 		MaxSegmentSize:       cfg.Engine.WAl.MaxSegmentSize,
 		DataDir:              dir,
 		FlushingBatchTimeout: cfg.Engine.WAl.FlushingBatchTimeout,
-		expiryEvent:          expiryEvent,
-	}
-	if err := w.restoreBatch(engine); err != nil {
-		return nil, err
-	}
-	if err := w.rotateSegment(); err != nil {
-		return nil, err
+		events:               make(chan record, 100),
 	}
 	return w, nil
+}
+
+func (w *WAL) Start(ctx context.Context, flushEvent chan struct{}) {
+	worker := newWorker(w.log, w.events)
+	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				w.log.Error("recovered", zap.Any("panic", r))
+			}
+		}()
+		worker.run(ctx, w, flushEvent)
+	}()
+}
+
+func (w *WAL) Replay(apply func(cmd string, args []string) error) error {
+	logs, err := os.ReadDir(w.DataDir)
+	if err != nil {
+		return err
+	}
+	for _, logFile := range logs {
+		path := filepath.Join(w.DataDir, logFile.Name())
+
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		dataSplit := strings.Split(string(data), "\n")
+		for idx, val := range dataSplit {
+			if val != "" {
+				query := strings.Split(val, " ")
+				command := query[0]
+				args := query[1:]
+				if err := apply(command, args); err != nil {
+					return fmt.Errorf("%s line %d: %w", logFile.Name(), idx+1, err)
+				}
+			}
+		}
+	}
+	return nil
+
 }
 
 func (w *WAL) rotateSegment() error {
@@ -122,14 +155,14 @@ func (w *WAL) flushAndNotify(log *zap.Logger) {
 	}
 }
 
-func NewWorker(log *zap.Logger, events chan WALEvent) *Worker {
+func newWorker(log *zap.Logger, events chan record) *Worker {
 	return &Worker{
 		log:    log,
 		events: events,
 	}
 }
 
-func (w *Worker) Run(ctx context.Context, wal *WAL, flushEvent chan struct{}) {
+func (w *Worker) run(ctx context.Context, wal *WAL, flushEvent chan struct{}) {
 	ticker := time.NewTicker(wal.FlushingBatchTimeout)
 	defer ticker.Stop()
 
@@ -195,55 +228,12 @@ func (w *WAL) close() error {
 	return nil
 }
 
-func (w *WAL) restoreBatch(engine storage.Engine) error {
-	logs, err := os.ReadDir(w.DataDir)
-	if err != nil {
-		return err
+func (w *WAL) Append(cmd string, args ...string) <-chan error {
+	done := make(chan error, 1)
+	w.events <- record{
+		Command:   cmd,
+		Arguments: args,
+		Done:      done,
 	}
-	segmentsToDel := make([]os.DirEntry, 0, len(logs))
-	defer func() {
-		for _, file := range segmentsToDel {
-			_ = os.Remove(fmt.Sprintf("%s/%s", w.DataDir, file.Name()))
-		}
-	}()
-	for _, logFile := range logs {
-		path := filepath.Join(w.DataDir, logFile.Name())
-
-		data, err := os.ReadFile(path)
-		if err != nil {
-			return err
-		}
-		dataSplit := strings.Split(string(data), "\n")
-		for _, val := range dataSplit {
-			if val != "" {
-				query := strings.Split(val, " ")
-				command := query[0]
-				switch command {
-				case "SET":
-					if len(query) < 4 {
-						continue
-					}
-					n, err := strconv.Atoi(query[3])
-					if err != nil {
-						return fmt.Errorf("error converting ttl to int")
-					}
-
-					d := time.Duration(n) * time.Second
-
-					w.expiryEvent <- expiry.ExpiryEvent{
-						Key:  query[1],
-						Time: d,
-					}
-					engine.Set(query[1], query[2])
-				case "DEL":
-					if len(query) < 2 {
-						continue
-					}
-					engine.Del(query[1])
-				}
-			}
-		}
-		segmentsToDel = append(segmentsToDel, logFile)
-	}
-	return nil
+	return done
 }
