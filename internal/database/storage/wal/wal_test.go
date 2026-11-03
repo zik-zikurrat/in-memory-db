@@ -66,3 +66,29 @@ func TestReplay_ReturnsApplyError(t *testing.T) {
 		t.Fatalf("want boom, got %v", err)
 	}
 }
+
+func TestListSegments_SortCorrect(t *testing.T) {
+	dir := t.TempDir()
+	writeSegment(t, dir, "segment_1.log", "SET a 1 0\nSET b 2 0\n")
+	writeSegment(t, dir, "segment_2.log", "DEL a\n")
+	writeSegment(t, dir, "segment_3.log", "DEL b\n")
+
+	var got []string
+	wal := newTestWAL(t, dir)
+	if err := wal.listSegments(); err != nil {
+		t.Fatal(err)
+	}
+	
+
+	want := []string{"SET a 1 0", "SET b 2 0", "DEL a"}
+	if !slices.Equal(got, want) {
+		t.Fatalf("got %v, want %v", got, want)
+	}
+
+	for _, name := range []string{"segment_1.log", "segment_2.log"} {
+		if _, err := os.Stat(filepath.Join(dir, name)); err != nil {
+			t.Fatalf("%s was deleted by Replay", name)
+		}
+	}
+
+}

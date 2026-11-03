@@ -3,7 +3,6 @@ package compute
 import (
 	"fmt"
 	"in-memory-key-value-db/internal/database/storage/expiry"
-	"in-memory-key-value-db/internal/database/storage/wal"
 	"strconv"
 	"time"
 
@@ -17,18 +16,22 @@ type Storage interface {
 	Scan(cursor int) []string
 }
 
+type LogEvent interface {
+	Append(cmd string, args ...string) <-chan error
+}
+
 type Compute struct {
 	storage     Storage
-	walEvents   chan wal.WALEvent
+	wal         LogEvent
 	changeChan  chan struct{}
 	expiryEvent chan expiry.ExpiryEvent
 	log         *zap.Logger
 }
 
-func NewCompute(storage Storage, log *zap.Logger, walEvents chan wal.WALEvent, changeChan chan struct{}, expiryEvent chan expiry.ExpiryEvent) *Compute {
+func NewCompute(storage Storage, log *zap.Logger, wal LogEvent, changeChan chan struct{}, expiryEvent chan expiry.ExpiryEvent) *Compute {
 	return &Compute{
 		storage:     storage,
-		walEvents:   walEvents,
+		wal:         wal,
 		changeChan:  changeChan,
 		expiryEvent: expiryEvent,
 		log:         log,
@@ -65,12 +68,7 @@ func (c *Compute) Handle(input string) (string, error) {
 			Time: d,
 		}
 
-		done := make(chan error, 1)
-		c.walEvents <- wal.WALEvent{
-			Command:   query.Command,
-			Arguments: query.Arguments,
-			Done:      done,
-		}
+		done := c.wal.Append(query.Command, query.Arguments...)
 		if err := <-done; err != nil {
 			c.log.Error("wal write failed", zap.Error(err))
 			return "", err
@@ -94,12 +92,7 @@ func (c *Compute) Handle(input string) (string, error) {
 
 	case DelCommand:
 		c.changeChan <- struct{}{}
-		done := make(chan error, 1)
-		c.walEvents <- wal.WALEvent{
-			Command:   query.Command,
-			Arguments: query.Arguments,
-			Done:      done,
-		}
+		done := c.wal.Append(query.Command, query.Arguments...)
 		if err := <-done; err != nil {
 			c.log.Error("wal write failed", zap.Error(err))
 			return "", err

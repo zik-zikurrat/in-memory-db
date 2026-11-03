@@ -6,6 +6,7 @@ import (
 	"in-memory-key-value-db/internal/config"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -20,11 +21,15 @@ type WAL struct {
 	MaxBatchSize         int64
 	DataDir              string
 	MaxSegmentSize       int64
-	CurrSegmentPath      string
-	CurrSegment          *os.File
-	CurrSegmentSize      int64
+	segments             []segment
 	FlushingBatchTimeout time.Duration
 	events               chan record
+}
+
+type segment struct {
+	id   uint64
+	size int64
+	path string
 }
 
 type Worker struct {
@@ -68,6 +73,42 @@ func (w *WAL) Start(ctx context.Context, flushEvent chan struct{}) {
 	}()
 }
 
+func (w *WAL) listSegments() error {
+	segmentOrder := make(map[int]segment)
+	lenSegments := 0
+	segments, err := os.ReadDir(w.DataDir)
+	if err != nil {
+		return err
+	}
+	for _, segmentV := range segments {
+		if segmentV.IsDir() {
+			continue
+		}
+		lenSegments++
+		order, err := strconv.Atoi(strings.Split(segmentV.Name(), "_")[1])
+		if err != nil {
+			return err
+		}
+		info, err := os.Stat(segmentV.Name())
+		if err != nil {
+			return err
+		}
+		segmentOrder[order] = segment{
+			id:   uint64(order),
+			size: info.Size(),
+			path: filepath.Join(w.DataDir, segmentV.Name()),
+		}
+	}
+	for i := 1; i <= lenSegments; i++ {
+		segment, ok := segmentOrder[i]
+		if !ok {
+			return fmt.Errorf("segment %d missing", i)
+		}
+		w.segments = append(w.segments, segment)
+	}
+	return nil
+}
+
 func (w *WAL) Replay(apply func(cmd string, args []string) error) error {
 	logs, err := os.ReadDir(w.DataDir)
 	if err != nil {
@@ -97,11 +138,16 @@ func (w *WAL) Replay(apply func(cmd string, args []string) error) error {
 }
 
 func (w *WAL) rotateSegment() error {
-	if w.CurrSegment != nil {
-		if err := w.CurrSegment.Sync(); err != nil {
+	currSegment := w.segments[len(w.segments)]
+	if currSegment != (segment{}) {
+		file, err := os.Open(currSegment.path)
+		if err != nil {
 			return err
 		}
-		if err := w.CurrSegment.Close(); err != nil {
+		if err := file.Sync(); err != nil {
+			return err
+		}
+		if err := file.Close(); err != nil {
 			return err
 		}
 	}
@@ -112,9 +158,12 @@ func (w *WAL) rotateSegment() error {
 		return err
 	}
 
-	w.CurrSegment = f
-	w.CurrSegmentPath = f.Name()
-	w.CurrSegmentSize = 0
+	segment := segment{
+		id:   1,
+		size: 0,
+		path: f.Name(),
+	}
+	w.segments = append(w.segments, segment)
 	return nil
 }
 
@@ -129,14 +178,19 @@ func (w *WAL) flushBatch() error {
 		}
 	}
 
+	currSegment := w.segments[len(w.segments)]
 	data := []byte(strings.Join(w.Batch, "\n") + "\n")
-	n, err := w.CurrSegment.Write(data)
+	currSegmentFile, err := os.OpenFile(currSegment.path, os.O_WRONLY, 0666)
+	if err != nil {
+		return err
+	}
+	n, err := currSegmentFile.Write(data)
 	if err != nil {
 		return fmt.Errorf("write batch: %w", err)
 	}
-	w.CurrSegmentSize += int64(n)
+	currSegment.size += int64(n)
 
-	if err := w.CurrSegment.Sync(); err != nil {
+	if err := currSegmentFile.Sync(); err != nil {
 		return fmt.Errorf("fsync: %w", err)
 	}
 
@@ -218,11 +272,17 @@ func (w *WAL) isBatchFull() bool {
 }
 
 func (w *WAL) isSegmentFull() bool {
-	return w.CurrSegmentSize >= w.MaxSegmentSize
+	currSegment := w.segments[len(w.segments)]
+	return currSegment.size >= w.MaxSegmentSize
 }
 
 func (w *WAL) close() error {
-	if err := w.CurrSegment.Close(); err != nil {
+	currSegment := w.segments[len(w.segments)]
+	currSegmentFile, err := os.Open(currSegment.path)
+	if err != nil {
+		return err
+	}
+	if err := currSegmentFile.Close(); err != nil {
 		return err
 	}
 	return nil

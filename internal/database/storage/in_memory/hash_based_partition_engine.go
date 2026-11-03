@@ -3,7 +3,6 @@ package inmemory
 import (
 	"context"
 	"in-memory-key-value-db/internal/config"
-	"in-memory-key-value-db/internal/database/storage/wal"
 	"runtime"
 	"sync"
 	"time"
@@ -83,15 +82,19 @@ type Elem struct {
 	prev  *Elem
 }
 
+type LogEvent interface {
+	Append(cmd string, args ...string) <-chan error
+}
+
 type Partition struct {
-	log       *zap.Logger
-	walEvents chan wal.WALEvent
-	mu        sync.RWMutex
-	m         map[string]*Elem
-	head      *Elem
-	tail      *Elem
-	used      uint64
-	limit     uint64
+	log   *zap.Logger
+	wal   LogEvent
+	mu    sync.RWMutex
+	m     map[string]*Elem
+	head  *Elem
+	tail  *Elem
+	used  uint64
+	limit uint64
 }
 
 type Data struct {
@@ -106,7 +109,7 @@ func NewElem(key, value string) *Elem {
 	}
 }
 
-func NewData(ctx context.Context, cache *Cache, walEvents chan wal.WALEvent, log *zap.Logger) *Data {
+func NewData(ctx context.Context, cache *Cache, wal LogEvent, log *zap.Logger) *Data {
 	n := runtime.NumCPU()
 
 	limitPerPartition := cache.limit / uint64(n)
@@ -115,10 +118,10 @@ func NewData(ctx context.Context, cache *Cache, walEvents chan wal.WALEvent, log
 
 	for i := range n {
 		p := &Partition{
-			walEvents: walEvents,
-			m:         make(map[string]*Elem),
-			limit:     limitPerPartition,
-			log:       log,
+			wal:   wal,
+			m:     make(map[string]*Elem),
+			limit: limitPerPartition,
+			log:   log,
 		}
 		d.buckets[i] = p
 
@@ -133,8 +136,8 @@ type HashBasedPartitionMapEngine struct {
 	data *Data
 }
 
-func NewHashBasedPartitionMapEngine(ctx context.Context, cache *Cache, walEvents chan wal.WALEvent, log *zap.Logger) *HashBasedPartitionMapEngine {
-	return &HashBasedPartitionMapEngine{data: NewData(ctx, cache, walEvents, log)}
+func NewHashBasedPartitionMapEngine(ctx context.Context, cache *Cache, wal LogEvent, log *zap.Logger) *HashBasedPartitionMapEngine {
+	return &HashBasedPartitionMapEngine{data: NewData(ctx, cache, wal, log)}
 }
 
 func (e *HashBasedPartitionMapEngine) Set(key, value string) {
@@ -284,12 +287,7 @@ func (p *Partition) deleteLeastActive() error {
 		return nil
 	}
 
-	done := make(chan error, 1)
-	p.walEvents <- wal.WALEvent{
-		Command:   "DEL",
-		Arguments: []string{victim.key, victim.value},
-		Done:      done,
-	}
+	done := p.wal.Append("DEL", victim.key, victim.value)
 	if err := <-done; err != nil {
 		p.log.Error("wal write tombstone failed", zap.Error(err))
 		return err

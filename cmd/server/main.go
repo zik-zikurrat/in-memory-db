@@ -31,14 +31,12 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
-	walEvents := make(chan wal.WALEvent, 100)
 	changeChan := make(chan struct{}, 100)
 	forcedFlush := make(chan struct{}, 1)
 	expiryEvent := make(chan expiry.ExpiryEvent, 100)
 
 	go func() {
 		sig := <-sigChan
-		defer close(walEvents)
 		defer close(changeChan)
 		defer close(expiryEvent)
 		defer close(forcedFlush)
@@ -56,11 +54,11 @@ func main() {
 
 	// Engine
 	cache := inmemory.NewCache(&cfg.Cache)
-	engine := inmemory.NewHashBasedPartitionMapEngine(ctx, cache, walEvents, logger)
+	engine := inmemory.NewHashBasedPartitionMapEngine(ctx, cache, logger)
 	// Storage
 	store := storage.NewStorage(engine, logger)
 	// Compute
-	comp := compute.NewCompute(store, logger, walEvents, changeChan, expiryEvent)
+	comp := compute.NewCompute(store, logger, changeChan, expiryEvent)
 	// DUMPER
 	dumper := snapshots.NewHashBasedPartitionDumper(cfg.Engine.Snapshot.DataDir, cfg.Engine.Snapshot.DBFileName, engine)
 	// SNAPSHOT
@@ -76,22 +74,12 @@ func main() {
 		snapshotWorker.Fork(ctx, cfg, changeChan, forcedFlush)
 	}()
 	// WAL
-	walWorker := wal.NewWorker(logger, walEvents)
-	wal, err := wal.NewWAL(cfg, engine, expiryEvent)
+	wal, err := wal.NewWAL(cfg, logger)
 	if err != nil {
 		logger.Error("error to create WAL", zap.Error(err))
 		return
 	}
-	go func() {
-		defer func() {
-			if r := recover(); r != nil {
-				logger.Error("catch panic from goroutine",
-					zap.Any("recovered", r),
-				)
-			}
-		}()
-		walWorker.Run(ctx, wal, forcedFlush)
-	}()
+	wal.Replay(engine.Del())
 
 	// Expiry
 	expiryWorker := expiry.NewWorker(logger, expiryEvent)
