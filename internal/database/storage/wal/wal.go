@@ -1,11 +1,13 @@
 package wal
 
 import (
+	"cmp"
 	"context"
 	"fmt"
 	"in-memory-key-value-db/internal/config"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -74,8 +76,7 @@ func (w *WAL) Start(ctx context.Context, flushEvent chan struct{}) {
 }
 
 func (w *WAL) listSegments() error {
-	segmentOrder := make(map[int]segment)
-	lenSegments := 0
+	segs := make([]segment, 0)
 	segments, err := os.ReadDir(w.DataDir)
 	if err != nil {
 		return err
@@ -84,28 +85,40 @@ func (w *WAL) listSegments() error {
 		if segmentV.IsDir() {
 			continue
 		}
-		lenSegments++
-		order, err := strconv.Atoi(strings.Split(segmentV.Name(), "_")[1])
+		name := segmentV.Name()
+		s, ok := strings.CutPrefix(name, "segment_")
+		if !ok {
+			continue
+		}
+		s, ok = strings.CutSuffix(s, ".log")
+		if !ok {
+			continue
+		}
+		id, err := strconv.ParseUint(s, 10, 64)
 		if err != nil {
 			return err
 		}
-		info, err := os.Stat(segmentV.Name())
+		info, err := segmentV.Info()
 		if err != nil {
 			return err
 		}
-		segmentOrder[order] = segment{
-			id:   uint64(order),
+		segs = append(segs, segment{
+			id:   id,
 			size: info.Size(),
 			path: filepath.Join(w.DataDir, segmentV.Name()),
+		})
+	}
+	slices.SortFunc(segs, func(a, b segment) int {
+		return cmp.Compare(a.id, b.id)
+	})
+	for i := 1; i < len(segs); i++ {
+		if segs[i].id == segs[i-1].id+1 {
+			continue
+		} else {
+			return fmt.Errorf("segment %d missing", segs[i-1].id+1)
 		}
 	}
-	for i := 1; i <= lenSegments; i++ {
-		segment, ok := segmentOrder[i]
-		if !ok {
-			return fmt.Errorf("segment %d missing", i)
-		}
-		w.segments = append(w.segments, segment)
-	}
+	w.segments = segs
 	return nil
 }
 
@@ -138,7 +151,10 @@ func (w *WAL) Replay(apply func(cmd string, args []string) error) error {
 }
 
 func (w *WAL) rotateSegment() error {
-	currSegment := w.segments[len(w.segments)]
+	if len(w.segments) == 0 {
+		return fmt.Errorf("empty list of segments")
+	}
+	currSegment := w.segments[len(w.segments)-1]
 	if currSegment != (segment{}) {
 		file, err := os.Open(currSegment.path)
 		if err != nil {
@@ -178,9 +194,17 @@ func (w *WAL) flushBatch() error {
 		}
 	}
 
-	currSegment := w.segments[len(w.segments)]
+	if len(w.segments) == 0 {
+		return fmt.Errorf("empty list of segments")
+	}
+	currSegment := w.segments[len(w.segments)-1]
 	data := []byte(strings.Join(w.Batch, "\n") + "\n")
 	currSegmentFile, err := os.OpenFile(currSegment.path, os.O_WRONLY, 0666)
+	defer func() {
+		if err := currSegmentFile.Close(); err != nil {
+			w.log.Error("error closed segment file", zap.Error(err))
+		}
+	}()
 	if err != nil {
 		return err
 	}
@@ -272,12 +296,18 @@ func (w *WAL) isBatchFull() bool {
 }
 
 func (w *WAL) isSegmentFull() bool {
-	currSegment := w.segments[len(w.segments)]
+	if len(w.segments) == 0 {
+		return false
+	}
+	currSegment := w.segments[len(w.segments)-1]
 	return currSegment.size >= w.MaxSegmentSize
 }
 
 func (w *WAL) close() error {
-	currSegment := w.segments[len(w.segments)]
+	if len(w.segments) == 0 {
+		return fmt.Errorf("empty list of segments")
+	}
+	currSegment := w.segments[len(w.segments)-1]
 	currSegmentFile, err := os.Open(currSegment.path)
 	if err != nil {
 		return err

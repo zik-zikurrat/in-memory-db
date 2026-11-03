@@ -71,24 +71,34 @@ func TestListSegments_SortCorrect(t *testing.T) {
 	dir := t.TempDir()
 	writeSegment(t, dir, "segment_1.log", "SET a 1 0\nSET b 2 0\n")
 	writeSegment(t, dir, "segment_2.log", "DEL a\n")
+	writeSegment(t, dir, ".DS_Store", "error\n")
 	writeSegment(t, dir, "segment_3.log", "DEL b\n")
 
-	var got []string
 	wal := newTestWAL(t, dir)
 	if err := wal.listSegments(); err != nil {
 		t.Fatal(err)
 	}
-	
 
-	want := []string{"SET a 1 0", "SET b 2 0", "DEL a"}
+	var got []uint64
+	for _, s := range wal.segments {
+		got = append(got, s.id)
+	}
+	want := []uint64{1, 2, 3}
 	if !slices.Equal(got, want) {
 		t.Fatalf("got %v, want %v", got, want)
 	}
+}
+func TestListSegments_SortCorrect_MissingSegment(t *testing.T) {
+	dir := t.TempDir()
+	writeSegment(t, dir, "segment_43.log", "SET a 1 0\nSET b 2 0\n")
+	writeSegment(t, dir, "segment_53.log", "DEL a\n")
+	writeSegment(t, dir, ".DS_Store", "error\n")
 
-	for _, name := range []string{"segment_1.log", "segment_2.log"} {
-		if _, err := os.Stat(filepath.Join(dir, name)); err != nil {
-			t.Fatalf("%s was deleted by Replay", name)
+	wal := newTestWAL(t, dir)
+	missingError := errors.New("segment 44 missing")
+	if err := wal.listSegments(); err != nil {
+		if err.Error() != missingError.Error() {
+			t.Fatal(err)
 		}
 	}
-
 }

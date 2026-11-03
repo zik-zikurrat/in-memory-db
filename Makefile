@@ -14,3 +14,8 @@ lint:
 
 clean:
 	rm -rf bin/
+
+vet:
+	go vet ./...
+
+check: vet race
