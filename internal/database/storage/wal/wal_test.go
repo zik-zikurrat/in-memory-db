@@ -155,21 +155,75 @@ func TestRotateSegment_CorrectIdINCR(t *testing.T) {
 	writeSegment(t, dir, "segment_45.log", "SET c 3 0\nSET d 4 0\n")
 
 	wal := newTestWAL(t, dir)
+	wal.MaxSegmentSize = 20
 	if err := wal.listSegments(); err != nil {
 		t.Fatal(err)
 	}
 	if err := wal.rotateSegment(); err != nil {
 		t.Fatal(err)
 	}
-	if err := wal.listSegments(); err != nil {
+	writeBatch(t, wal, "SET", "a", "1", "0")
+	writeBatch(t, wal, "SET", "b", "2", "0")
+	writeBatch(t, wal, "DEL", "a")
+	writeBatch(t, wal, "SET", "c", "3", "0")
+	writeBatch(t, wal, "SET", "d", "4", "0")
+	if err := wal.flushBatch(); err != nil {
 		t.Fatal(err)
 	}
 	lastSegment := wal.segments[len(wal.segments)-1]
 	if lastSegment.id != 46 {
 		t.Fatalf("want segment id 46 got: %d", lastSegment.id)
 	}
+	if lastSegment.size == 0 {
+		t.Fatalf("batch inst write data to segment")
+	}
 }
 
-func TestReplay_CorrectReply(t *testing.T) {
+func TestCleanStart(t *testing.T) {
+	dir := t.TempDir()
+	wal := newTestWAL(t, dir)
+	writeBatch(t, wal, "SET", "a", "1", "0")
+	writeBatch(t, wal, "SET", "b", "2", "0")
+	writeBatch(t, wal, "DEL", "a")
+	writeBatch(t, wal, "SET", "c", "3", "0")
+	writeBatch(t, wal, "SET", "d", "4", "0")
+	if err := wal.flushBatch(); err != nil {
+		t.Fatal(err)
+	}
+}
 
+func TestFlushBatch_TempChangeDirPermissions(t *testing.T) {
+	dir := t.TempDir()
+	writeSegment(t, dir, "segment_43.log", "SET a 1 0\nSET b 2 0\n")
+	writeSegment(t, dir, "segment_44.log", "DEL a\n")
+	writeSegment(t, dir, "segment_45.log", "SET c 3 0\nSET d 4 0\n")
+	if err := os.Chmod(dir, 0o500); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(dir, 0o755) })
+	wal := newTestWAL(t, dir)
+	if err := wal.listSegments(); err != nil {
+		t.Fatal(err)
+	}
+	if err := wal.rotateSegment(); err == nil {
+		t.Fatal("want permission denied")
+	}
+	if len(wal.segments) != 3 {
+		t.Fatal("create new segment")
+	}
+
+	writeBatch(t, wal, "SET", "a", "1", "0")
+	writeBatch(t, wal, "SET", "b", "2", "0")
+	writeBatch(t, wal, "DEL", "a")
+	writeBatch(t, wal, "SET", "c", "3", "0")
+	writeBatch(t, wal, "SET", "d", "4", "0")
+	if err := os.Chmod(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := wal.flushBatch(); err != nil {
+		t.Fatal(err)
+	}
+	if len(wal.segments) != 4 {
+		t.Fatal("failed to create segment")
+	}
 }

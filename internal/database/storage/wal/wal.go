@@ -150,19 +150,18 @@ func (w *WAL) Replay(apply func(cmd string, args []string) error) error {
 func (w *WAL) rotateSegment() error {
 	var id uint64 = 1
 	name := fmt.Sprintf("segment_%d.log", id)
-	defer func() {
-		_, err := os.Create(filepath.Join(w.DataDir, name))
-		if err != nil {
-			w.log.Error("failed to create segment file", zap.Error(err))
-		}
-	}()
 	if len(w.segments) == 0 {
 		w.log.Warn("empty segments list")
 		segment := segment{
 			id:   id,
 			size: 0,
-			path: name,
+			path: filepath.Join(w.DataDir, name),
 		}
+		file, err := w.openFile(name)
+		if err != nil {
+			return err
+		}
+		defer w.closeFile(file)
 		w.segments = append(w.segments, segment)
 		return nil
 	}
@@ -172,8 +171,13 @@ func (w *WAL) rotateSegment() error {
 	segment := segment{
 		id:   currSegment.id + 1,
 		size: 0,
-		path: name,
+		path: filepath.Join(w.DataDir, name),
 	}
+	file, err := w.openFile(name)
+	if err != nil {
+		return err
+	}
+	defer w.closeFile(file)
 	w.segments = append(w.segments, segment)
 	return nil
 }
@@ -292,7 +296,7 @@ func (w *WAL) isSegmentFull() bool {
 
 func (w *WAL) close() error {
 	if len(w.segments) == 0 {
-		return fmt.Errorf("empty list of segments")
+		return nil
 	}
 	currSegment := w.segments[len(w.segments)-1]
 	currSegmentFile, err := os.Open(currSegment.path)
