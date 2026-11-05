@@ -123,14 +123,11 @@ func (w *WAL) listSegments() error {
 }
 
 func (w *WAL) Replay(apply func(cmd string, args []string) error) error {
-	logs, err := os.ReadDir(w.DataDir)
-	if err != nil {
+	if err := w.listSegments(); err != nil {
 		return err
 	}
-	for _, logFile := range logs {
-		path := filepath.Join(w.DataDir, logFile.Name())
-
-		data, err := os.ReadFile(path)
+	for _, segmentV := range w.segments {
+		data, err := os.ReadFile(segmentV.path)
 		if err != nil {
 			return err
 		}
@@ -141,7 +138,7 @@ func (w *WAL) Replay(apply func(cmd string, args []string) error) error {
 				command := query[0]
 				args := query[1:]
 				if err := apply(command, args); err != nil {
-					return fmt.Errorf("%s line %d: %w", logFile.Name(), idx+1, err)
+					return fmt.Errorf("segment id: %d line %d: %w", segmentV.id, idx+1, err)
 				}
 			}
 		}
@@ -151,33 +148,31 @@ func (w *WAL) Replay(apply func(cmd string, args []string) error) error {
 }
 
 func (w *WAL) rotateSegment() error {
+	var id uint64 = 1
+	name := fmt.Sprintf("segment_%d.log", id)
+	defer func() {
+		_, err := os.Create(filepath.Join(w.DataDir, name))
+		if err != nil {
+			w.log.Error("failed to create segment file", zap.Error(err))
+		}
+	}()
 	if len(w.segments) == 0 {
-		return fmt.Errorf("empty list of segments")
+		w.log.Warn("empty segments list")
+		segment := segment{
+			id:   id,
+			size: 0,
+			path: name,
+		}
+		w.segments = append(w.segments, segment)
+		return nil
 	}
 	currSegment := w.segments[len(w.segments)-1]
-	if currSegment != (segment{}) {
-		file, err := os.Open(currSegment.path)
-		if err != nil {
-			return err
-		}
-		if err := file.Sync(); err != nil {
-			return err
-		}
-		if err := file.Close(); err != nil {
-			return err
-		}
-	}
-
-	name := fmt.Sprintf("segment_%d.log", time.Now().UnixMilli())
-	f, err := os.OpenFile(filepath.Join(w.DataDir, name), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
-	if err != nil {
-		return err
-	}
-
+	id = currSegment.id + 1
+	name = fmt.Sprintf("segment_%d.log", id)
 	segment := segment{
-		id:   1,
+		id:   currSegment.id + 1,
 		size: 0,
-		path: f.Name(),
+		path: name,
 	}
 	w.segments = append(w.segments, segment)
 	return nil
@@ -188,26 +183,18 @@ func (w *WAL) flushBatch() error {
 		return nil
 	}
 
-	if w.isSegmentFull() {
+	if len(w.segments) == 0 || w.isSegmentFull() {
 		if err := w.rotateSegment(); err != nil {
 			return err
 		}
 	}
-
-	if len(w.segments) == 0 {
-		return fmt.Errorf("empty list of segments")
-	}
-	currSegment := w.segments[len(w.segments)-1]
+	currSegment := &w.segments[len(w.segments)-1]
 	data := []byte(strings.Join(w.Batch, "\n") + "\n")
-	currSegmentFile, err := os.OpenFile(currSegment.path, os.O_WRONLY, 0666)
-	defer func() {
-		if err := currSegmentFile.Close(); err != nil {
-			w.log.Error("error closed segment file", zap.Error(err))
-		}
-	}()
+	currSegmentFile, err := os.OpenFile(currSegment.path, os.O_WRONLY|os.O_APPEND, 0666)
 	if err != nil {
 		return err
 	}
+	defer w.closeFile(currSegmentFile)
 	n, err := currSegmentFile.Write(data)
 	if err != nil {
 		return fmt.Errorf("write batch: %w", err)
@@ -222,14 +209,14 @@ func (w *WAL) flushBatch() error {
 	return nil
 }
 
-func (w *WAL) flushAndNotify(log *zap.Logger) {
+func (w *WAL) flushAndNotify() {
 	err := w.flushBatch()
 	for _, done := range w.Pending {
 		done <- err
 	}
 	w.Pending = w.Pending[:0]
 	if err != nil {
-		log.Error("flush failed", zap.Error(err))
+		w.log.Error("flush failed", zap.Error(err))
 	}
 }
 
@@ -257,16 +244,16 @@ func (w *Worker) run(ctx context.Context, wal *WAL, flushEvent chan struct{}) {
 			wal.Pending = append(wal.Pending, event.Done)
 			wal.Offset++
 			if wal.isBatchFull() {
-				wal.flushAndNotify(w.log)
+				wal.flushAndNotify()
 			}
 		case <-ticker.C:
 			if len(wal.Batch) > 0 {
 				w.log.Debug("flushing batch by ticker", zap.Int("size", len(wal.Batch)))
-				wal.flushAndNotify(w.log)
+				wal.flushAndNotify()
 			}
 		case <-flushEvent:
 			w.log.Debug("forced flush butch due to dump")
-			wal.flushAndNotify(w.log)
+			wal.flushAndNotify()
 		case <-ctx.Done():
 			w.log.Info("context done")
 			for {
@@ -282,7 +269,7 @@ func (w *Worker) run(ctx context.Context, wal *WAL, flushEvent chan struct{}) {
 			}
 		flush:
 			w.log.Debug("flushing batch by ctx done", zap.Int("size", len(wal.Batch)))
-			wal.flushAndNotify(w.log)
+			wal.flushAndNotify()
 			if err := wal.close(); err != nil {
 				w.log.Error("error closed wal", zap.Error(err))
 			}
@@ -326,4 +313,18 @@ func (w *WAL) Append(cmd string, args ...string) <-chan error {
 		Done:      done,
 	}
 	return done
+}
+
+func (w *WAL) closeFile(file *os.File) {
+	if err := file.Close(); err != nil {
+		w.log.Error("failed to close file", zap.Error(err))
+	}
+}
+
+func (w *WAL) openFile(name string) (*os.File, error) {
+	f, err := os.OpenFile(filepath.Join(w.DataDir, name), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
+	if err != nil {
+		return nil, err
+	}
+	return f, nil
 }

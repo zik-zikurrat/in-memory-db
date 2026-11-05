@@ -2,6 +2,7 @@ package inmemory
 
 import (
 	"context"
+	"fmt"
 	"in-memory-key-value-db/internal/config"
 	"runtime"
 	"sync"
@@ -304,5 +305,23 @@ func (p *Partition) deleteLeastActive() error {
 		p.tail = nil
 	}
 
+	return nil
+}
+
+func (e *HashBasedPartitionMapEngine) Apply(cmd string, args []string) error {
+	switch cmd {
+	case "SET":
+		if len(args) < 2 {
+			return fmt.Errorf("SET: want key value, got %v", args)
+		}
+		e.Set(args[0], args[1])
+	case "DEL":
+		if len(args) < 1 {
+			return fmt.Errorf("DEL: want key, got %v", args)
+		}
+		e.Del(args[0])
+	default:
+		return fmt.Errorf("unknown command %q", cmd)
+	}
 	return nil
 }

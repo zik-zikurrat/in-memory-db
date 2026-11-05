@@ -22,9 +22,11 @@ import (
 
 func main() {
 	cfg := config.MustLoad()
-	logger, err := logger.SetupLogger(cfg)
+	log, err := logger.SetupLogger(cfg)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "failed to init logger: %v\n", err)
+		if _, err := fmt.Fprintf(os.Stderr, "failed to init logger: %v\n", err); err != nil {
+			os.Exit(1)
+		}
 		os.Exit(1)
 	}
 
@@ -40,7 +42,7 @@ func main() {
 		defer close(changeChan)
 		defer close(expiryEvent)
 		defer close(forcedFlush)
-		logger.Info("got os signal", zap.String("signal", sig.String()))
+		log.Info("got os signal", zap.String("signal", sig.String()))
 		cancel()
 	}()
 
@@ -49,44 +51,55 @@ func main() {
 	// нужно при резком завершении или если паника то лог все равно выведется , будет принудительный flush буфферов
 	// sync может вернуть ошибку, мы ее игнорируем
 	defer func() {
-		_ = logger.Sync()
+		_ = log.Sync()
 	}()
+
+	// WAL
+	walLog, err := wal.NewWAL(cfg, log)
+	if err != nil {
+		log.Error("error to create WAL", zap.Error(err))
+		return
+	}
 
 	// Engine
 	cache := inmemory.NewCache(&cfg.Cache)
-	engine := inmemory.NewHashBasedPartitionMapEngine(ctx, cache, logger)
+	engine := inmemory.NewHashBasedPartitionMapEngine(ctx, cache, walLog, log)
+
+	// REPLAY DATA WITH ENGINE
+	if err := walLog.Replay(engine.Apply); err != nil {
+		log.Error("WAL is corrupted", zap.Error(err))
+		return
+	}
+	walLog.Start(ctx, forcedFlush)
+
 	// Storage
-	store := storage.NewStorage(engine, logger)
+	store := storage.NewStorage(engine, log)
+
 	// Compute
-	comp := compute.NewCompute(store, logger, changeChan, expiryEvent)
+	comp := compute.NewCompute(store, log, walLog, changeChan, expiryEvent)
+
 	// DUMPER
 	dumper := snapshots.NewHashBasedPartitionDumper(cfg.Engine.Snapshot.DataDir, cfg.Engine.Snapshot.DBFileName, engine)
+
 	// SNAPSHOT
-	snapshotWorker := snapshots.NewSnapshot(dumper, logger)
+	snapshotWorker := snapshots.NewSnapshot(dumper, log)
 	go func() {
 		defer func() {
 			if r := recover(); r != nil {
-				logger.Error("catch panic from goroutine",
+				log.Error("catch panic from goroutine",
 					zap.Any("recovered", r),
 				)
 			}
 		}()
 		snapshotWorker.Fork(ctx, cfg, changeChan, forcedFlush)
 	}()
-	// WAL
-	wal, err := wal.NewWAL(cfg, logger)
-	if err != nil {
-		logger.Error("error to create WAL", zap.Error(err))
-		return
-	}
-	wal.Replay(engine.Del())
 
 	// Expiry
-	expiryWorker := expiry.NewWorker(logger, expiryEvent)
+	expiryWorker := expiry.NewWorker(log, expiryEvent)
 	go func() {
 		defer func() {
 			if r := recover(); r != nil {
-				logger.Error("catch panic from goroutine",
+				log.Error("catch panic from goroutine",
 					zap.Any("recovered", r),
 				)
 			}
@@ -94,9 +107,9 @@ func main() {
 		expiryWorker.Run(ctx, engine)
 	}()
 
-	server, err := network.NewTCPServer(cfg, logger)
+	server, err := network.NewTCPServer(cfg, log)
 	if err != nil {
-		logger.Error("failed to create new tcp server", zap.Error(err))
+		log.Error("failed to create new tcp server", zap.Error(err))
 		return
 	}
 
@@ -108,7 +121,7 @@ func main() {
 		return []byte(response)
 	}
 	if err := server.Start(ctx, handler); err != nil {
-		logger.Error("server stopped with error", zap.Error(err))
+		log.Error("server stopped with error", zap.Error(err))
 	}
-	logger.Info("server stopped")
+	log.Info("server stopped")
 }

@@ -30,6 +30,6 @@ __debug_bin
 .DS_Store
 vendor/
 
-# dumps and wal
+# dumps and walLog
 dump.json
 dump.json.tmp

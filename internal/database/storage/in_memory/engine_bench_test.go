@@ -3,7 +3,6 @@ package inmemory
 import (
 	"context"
 	"fmt"
-	"in-memory-key-value-db/internal/database/storage/wal"
 	"math/rand"
 	"strconv"
 	"testing"
@@ -17,20 +16,26 @@ const (
 	_defaultCacheLimit = 268435456 // 256MB
 )
 
+type noopWAL struct{}
+
+func (noopWAL) Append(cmd string, args ...string) <-chan error {
+	done := make(chan error, 1)
+	done <- nil
+	return done
+}
+
 func helperNewPartitionEngine(ctx context.Context) *HashBasedPartitionMapEngine {
-	walEvents := make(chan wal.WALEvent, 100)
 	noopLogger := zap.NewNop()
 
 	testCache := &Cache{
 		limit: _defaultCacheLimit,
 	}
-
-	return NewHashBasedPartitionMapEngine(ctx, testCache, walEvents, noopLogger)
+	return NewHashBasedPartitionMapEngine(ctx, testCache, noopWAL{}, noopLogger)
 }
 
 func benchMixedParallel(b *testing.B, get func(string) (string, bool), set func(string, string), writePct int) {
 	const keyspace = 100_000
-	for i := 0; i < keyspace; i++ {
+	for i := range keyspace {
 		set("key"+strconv.Itoa(i), "value")
 	}
 	b.ReportAllocs()
