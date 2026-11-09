@@ -183,6 +183,9 @@ func (w *WAL) rotateSegment() error {
 }
 
 func (w *WAL) flushBatch() error {
+	defer func() {
+		w.Batch = w.Batch[:0]
+	}()
 	if len(w.Batch) == 0 {
 		return nil
 	}
@@ -199,17 +202,25 @@ func (w *WAL) flushBatch() error {
 		return err
 	}
 	defer w.closeFile(currSegmentFile)
+	delCorruptedFileStart := currSegment.size
 	n, err := currSegmentFile.Write(data)
 	if err != nil {
+		if n != 0 {
+			if err := deleteCorruptedFileData(currSegmentFile, delCorruptedFileStart); err != nil {
+				return fmt.Errorf("failed to delete corrupted data: %w", err)
+			}
+		}
 		return fmt.Errorf("write batch: %w", err)
 	}
 	currSegment.size += int64(n)
 
 	if err := currSegmentFile.Sync(); err != nil {
+		if err := deleteCorruptedFileData(currSegmentFile, delCorruptedFileStart); err != nil {
+			return fmt.Errorf("failed to delete corrupted data: %w", err)
+		}
+		currSegment.size -= int64(n)
 		return fmt.Errorf("fsync: %w", err)
 	}
-
-	w.Batch = w.Batch[:0]
 	return nil
 }
 
@@ -331,4 +342,12 @@ func (w *WAL) openFile(name string) (*os.File, error) {
 		return nil, err
 	}
 	return f, nil
+}
+
+func deleteCorruptedFileData(file *os.File, delStart int64) error {
+	err := file.Truncate(delStart)
+	if err != nil {
+		return err
+	}
+	return nil
 }
