@@ -208,6 +208,9 @@ func TestFlushBatch_TempChangeDirPermissions(t *testing.T) {
 	if err := wal.rotateSegment(); err == nil {
 		t.Fatal("want permission denied")
 	}
+	if err := wal.listSegments(); err != nil {
+		t.Fatal(err)
+	}
 	if len(wal.segments) != 3 {
 		t.Fatal("create new segment")
 	}
