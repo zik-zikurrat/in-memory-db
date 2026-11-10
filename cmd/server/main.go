@@ -20,6 +20,10 @@ import (
 	"go.uber.org/zap"
 )
 
+func openOSFile(name string, flag int, perm os.FileMode) (wal.FileInterface, error) {
+	return os.OpenFile(name, flag, perm)
+}
+
 func main() {
 	cfg := config.MustLoad()
 	log, err := logger.SetupLogger(cfg)
@@ -55,7 +59,7 @@ func main() {
 	}()
 
 	// WAL
-	walLog, err := wal.NewWAL(cfg, log)
+	walLog, err := wal.NewWAL(cfg, log, openOSFile)
 	if err != nil {
 		log.Error("error to create WAL", zap.Error(err))
 		return

@@ -15,6 +15,13 @@ import (
 	"go.uber.org/zap"
 )
 
+type FileInterface interface {
+	Write(b []byte) (n int, err error)
+	Sync() error
+	Truncate(size int64) error
+	Close() error
+}
+
 type WAL struct {
 	log                  *zap.Logger
 	Offset               int
@@ -26,6 +33,7 @@ type WAL struct {
 	segments             []segment
 	FlushingBatchTimeout time.Duration
 	events               chan record
+	fOpenFile            func(name string, flag int, perm os.FileMode) (FileInterface, error)
 }
 
 type segment struct {
@@ -45,7 +53,7 @@ type record struct {
 	Done      chan error
 }
 
-func NewWAL(cfg *config.Config, log *zap.Logger) (*WAL, error) {
+func NewWAL(cfg *config.Config, log *zap.Logger, fOpenFile func(name string, flag int, perm os.FileMode) (FileInterface, error)) (*WAL, error) {
 	dir := cfg.Engine.WAl.DataDir
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		return nil, fmt.Errorf("create wal dir: %w", err)
@@ -59,6 +67,7 @@ func NewWAL(cfg *config.Config, log *zap.Logger) (*WAL, error) {
 		DataDir:              dir,
 		FlushingBatchTimeout: cfg.Engine.WAl.FlushingBatchTimeout,
 		events:               make(chan record, 100),
+		fOpenFile:            fOpenFile,
 	}
 	return w, nil
 }
@@ -197,7 +206,7 @@ func (w *WAL) flushBatch() error {
 	}
 	currSegment := &w.segments[len(w.segments)-1]
 	data := []byte(strings.Join(w.Batch, "\n") + "\n")
-	currSegmentFile, err := os.OpenFile(currSegment.path, os.O_WRONLY|os.O_APPEND, 0666)
+	currSegmentFile, err := w.fOpenFile(currSegment.path, os.O_WRONLY|os.O_APPEND, 0666)
 	if err != nil {
 		return err
 	}
@@ -330,21 +339,21 @@ func (w *WAL) Append(cmd string, args ...string) <-chan error {
 	return done
 }
 
-func (w *WAL) closeFile(file *os.File) {
+func (w *WAL) closeFile(file FileInterface) {
 	if err := file.Close(); err != nil {
 		w.log.Error("failed to close file", zap.Error(err))
 	}
 }
 
-func (w *WAL) openFile(name string) (*os.File, error) {
-	f, err := os.OpenFile(filepath.Join(w.DataDir, name), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
+func (w *WAL) openFile(name string) (FileInterface, error) {
+	f, err := w.fOpenFile(filepath.Join(w.DataDir, name), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
 	if err != nil {
 		return nil, err
 	}
 	return f, nil
 }
 
-func deleteCorruptedFileData(file *os.File, delStart int64) error {
+func deleteCorruptedFileData(file FileInterface, delStart int64) error {
 	err := file.Truncate(delStart)
 	if err != nil {
 		return err
