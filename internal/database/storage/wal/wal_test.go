@@ -282,7 +282,6 @@ func TestFlushBatch_TempChangeDirPermissions(t *testing.T) {
 }
 
 func TestFlushBatch(t *testing.T) {
-	dir := t.TempDir()
 	cases := []struct {
 		maxSegmentSize int64
 		fakeFile       *testFile
@@ -315,6 +314,7 @@ func TestFlushBatch(t *testing.T) {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
+			dir := t.TempDir()
 			writeSegment(t, dir, "segment_43.log", "SET a 1 0\nSET b 2 0\n")
 			writeSegment(t, dir, "segment_44.log", "DEL a\n")
 			writeSegment(t, dir, "segment_45.log", "SET c 3 0\nSET d 4 0\n")
@@ -323,6 +323,9 @@ func TestFlushBatch(t *testing.T) {
 			}
 			wal := newTestWALBroken(t, dir, open)
 			wal.MaxSegmentSize = tc.maxSegmentSize
+			if err := wal.listSegments(); err != nil {
+				t.Fatal(err)
+			}
 			writeBatch(t, wal, "SET", "a", "1", "0")
 			writeBatch(t, wal, "SET", "b", "2", "0")
 			writeBatch(t, wal, "DEL", "a")
