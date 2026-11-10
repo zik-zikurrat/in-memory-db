@@ -286,7 +286,6 @@ func TestFlushBatch(t *testing.T) {
 		maxSegmentSize int64
 		fakeFile       *testFile
 		name           string
-		err            bool
 		wantError      error
 	}{
 		{
@@ -295,7 +294,6 @@ func TestFlushBatch(t *testing.T) {
 				size:        20,
 				failedWrite: true,
 			},
-			err:       true,
 			name:      "Failed write",
 			wantError: errWrite,
 		},
@@ -305,13 +303,11 @@ func TestFlushBatch(t *testing.T) {
 				size:       20,
 				failedSync: true,
 			},
-			err:       true,
 			name:      "Failed sync",
 			wantError: errSync,
 		},
 	}
 	for _, tc := range cases {
-		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			dir := t.TempDir()
@@ -332,11 +328,11 @@ func TestFlushBatch(t *testing.T) {
 			writeBatch(t, wal, "SET", "c", "3", "0")
 			writeBatch(t, wal, "SET", "d", "4", "0")
 			if err := wal.flushBatch(); err == nil {
-				if tc.err {
+				if tc.wantError != nil {
 					t.Fatal("want error")
 				}
 			} else {
-				if !tc.err {
+				if tc.wantError == nil {
 					t.Fatal(err)
 				}
 				if !errors.Is(err, tc.wantError) {
@@ -349,7 +345,6 @@ func TestFlushBatch(t *testing.T) {
 				if len(wal.Batch) != 0 {
 					t.Fatal("batch must be empty")
 				}
-				return
 			}
 		})
 	}
